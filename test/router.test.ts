@@ -83,6 +83,58 @@ function opencodeUsage(percentRemaining = 94): unknown {
   });
 }
 
+/**
+ * The Mac capture shape behind P2c: the default 13-candidate `workers` chain
+ * with OpenCode Go's weekly window at 76% while Grok carries 100% headroom and
+ * a known spendPriority. Chain order (deepseek first) must win anyway.
+ */
+function macCaptureUsage(): unknown {
+  return usage({
+    providers: [
+      {
+        provider: "opencode",
+        label: "OpenCode",
+        source: "openusage",
+        state: { status: "fresh", stale: false },
+        windows: [
+          { id: "session", kind: "session", percentRemaining: 90 },
+          { id: "weekly", kind: "weekly", percentRemaining: 76 },
+          { id: "monthly", kind: "monthly", percentRemaining: 97 },
+        ],
+        pools: [
+          { id: "opencode-go", label: "Go", provider: "opencode", windowIds: ["session", "weekly", "monthly"], percentRemaining: 76, modelCount: 27 },
+          { id: "opencode", label: "Zen", provider: "opencode", windowIds: ["session", "weekly", "monthly"], percentRemaining: 76, modelCount: 69 },
+        ],
+        quotaSemantics: { status: "unknown", description: "no scalar", effectiveAvailability: [] },
+      },
+      {
+        provider: "grok",
+        state: { status: "fresh", stale: false },
+        windows: [{ id: "all", percentRemaining: 100 }],
+        quotaSemantics: {
+          effectiveAvailability: [
+            {
+              scope: "all_models",
+              status: "known",
+              effectivePercentRemaining: 100,
+              selection: { status: "known", spendPriority: 0.5 },
+            },
+          ],
+        },
+      },
+      { provider: "cursor", state: { status: "fresh", stale: false }, windows: [{ id: "auto_usage", percentRemaining: 99 }] },
+      {
+        provider: "agy",
+        state: { status: "fresh", stale: false },
+        windows: [
+          { id: "gemini_5h", percentRemaining: 100 },
+          { id: "gemini_weekly", percentRemaining: 90 },
+        ],
+      },
+    ],
+  });
+}
+
 beforeEach(() => {
   savedExitCode = process.exitCode;
   savedEnv = {
@@ -222,6 +274,38 @@ describe("route", () => {
     expect(decision.model).toMatch(/^opencode(-go)?\//);
   });
 
+  it("keeps the lane chain ahead of headroom and spendPriority (Mac capture shape)", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", macCaptureUsage());
+
+    const { output, exitCode } = await run([
+      "route",
+      "--kind",
+      "ship",
+      "--difficulty",
+      "medium",
+      "--surface",
+      "backend",
+      "--usage-json",
+      usageFile,
+      "--json",
+    ]);
+    expect(exitCode).toBe(0);
+    const decision = JSON.parse(output) as {
+      harness: string;
+      model?: string;
+      provider: string;
+      pool?: string;
+      reason: string;
+    };
+    // Grok's fresh 100% and known spendPriority must not outrank the chain head.
+    expect(decision.harness).toBe("opencode");
+    expect(decision.model).toBe("opencode-go/deepseek-v4.1-flash");
+    expect(decision.provider).toBe("opencode");
+    expect(decision.pool).toBe("opencode-go");
+    expect(decision.reason).toContain("headroom=76%");
+  });
+
   it("refuses when the fleet is at the agent ceiling", async () => {
     const policy = cloneDefault();
     policy.kinds.ship.medium.candidates = [
@@ -344,6 +428,50 @@ describe("explain", () => {
     expect(exitCode).toBe(0);
     const line = output.split("\n").find((row) => row.startsWith("selected:"));
     expect(line).toBe("selected: codex/harness-default/codex");
+  });
+
+  it("prints the chain rank each candidate was considered at", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", macCaptureUsage());
+
+    const json = await run([
+      "explain",
+      "--kind",
+      "ship",
+      "--difficulty",
+      "medium",
+      "--surface",
+      "backend",
+      "--usage-json",
+      usageFile,
+      "--json",
+    ]);
+    expect(json.exitCode).toBe(0);
+    const report = JSON.parse(json.output) as {
+      selected: { model?: string } | null;
+      candidates: Array<{ rank: number; model: string; decision: string }>;
+    };
+    expect(report.selected?.model).toBe("opencode-go/deepseek-v4.1-flash");
+    expect(report.candidates).toHaveLength(13);
+    expect(report.candidates.every((row) => row.decision === "eligible")).toBe(true);
+    expect(report.candidates.map((row) => row.rank)).toEqual(
+      Array.from({ length: 13 }, (_, index) => index + 1),
+    );
+    expect(report.candidates[0]?.model).toBe("opencode-go/deepseek-v4.1-flash");
+
+    const toonOutput = await run([
+      "explain",
+      "--kind",
+      "ship",
+      "--difficulty",
+      "medium",
+      "--surface",
+      "backend",
+      "--usage-json",
+      usageFile,
+    ]);
+    expect(toonOutput.exitCode).toBe(0);
+    expect(toonOutput.output).toContain("candidates[13]{rank,");
   });
 
   it("omits the selected line when no candidate is eligible", async () => {

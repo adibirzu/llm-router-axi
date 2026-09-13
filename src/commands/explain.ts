@@ -24,7 +24,7 @@ inputs:
   --now <epoch>            fix the current epoch second (test seam)
   --json                   emit the same table as JSON
 outputs:
-  TOON candidates[]: harness, provider, pool, model, decision (eligible|refused), reason
+  TOON candidates[]: rank (1-based chain position), harness, provider, pool, model, decision (eligible|refused), reason
   rejection reasons reuse the frozen selector strings, e.g.
     "provider telemetry not fresh", "quota headroom N% is at or below R% reserve",
     "declared quota window <id> is absent from provider telemetry"

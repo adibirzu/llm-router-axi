@@ -394,6 +394,14 @@ export function selectProfiles(params: {
   now: number;
   state: EngineState;
   home: string;
+  /**
+   * Optional chain rank per profile (parallel to `profiles`). Lower rank wins:
+   * a lane's declared candidate order is the priority, and headroom /
+   * spendPriority only break ties among profiles sharing the same rank.
+   * `select` (the arbitrary-profile surface) omits it, keeping the fork's
+   * spendPriority rotation.
+   */
+  ranks?: number[];
 }): SelectionReport {
   const { profiles, quota, settings, now, home } = params;
   const state = structuredCloneState(params.state);
@@ -483,10 +491,20 @@ export function selectProfiles(params: {
     };
   }
 
+  const rankByProfile = new Map<EngineProfile, number>();
+  if (params.ranks) {
+    params.ranks.forEach((rank, index) => {
+      const profile = profiles[index];
+      if (profile && Number.isFinite(rank)) rankByProfile.set(profile, rank);
+    });
+  }
+  const usesChainRank = rankByProfile.size > 0;
+
   const ranked: Array<{
     group: (typeof eligibleProviders)[number];
     candidate: EngineProfile;
     spend: number | null;
+    rank: number | null;
   }> = [];
   for (const group of eligibleProviders) {
     for (const candidate of group.profiles) {
@@ -494,13 +512,32 @@ export function selectProfiles(params: {
         group,
         candidate,
         spend: knownSpendPriority(group.telemetry, spendWindowIds(candidate)),
+        rank: rankByProfile.get(candidate) ?? null,
       });
     }
   }
   const known = ranked.filter((item) => item.spend !== null);
   let pool = ranked;
   let basis = "least-recent eligible subscription";
-  if (known.length) {
+  if (usesChainRank) {
+    // The lane's declared chain order is the priority: consider the lowest
+    // ranked eligible candidates first, then let spendPriority break a tie
+    // among candidates that share that rank.
+    const possibleRanks = ranked
+      .map((item) => item.rank)
+      .filter((rank): rank is number => rank !== null);
+    const bestRank = possibleRanks.length ? Math.min(...possibleRanks) : 0;
+    const atRank = ranked.filter((item) => item.rank === bestRank);
+    const knownAtRank = atRank.filter((item) => item.spend !== null);
+    if (knownAtRank.length) {
+      const best = Math.max(...knownAtRank.map((item) => item.spend as number));
+      pool = knownAtRank.filter((item) => item.spend === best);
+      basis = `chain-rank=${bestRank} spendPriority=${best}`;
+    } else {
+      pool = atRank;
+      basis = `chain-rank=${bestRank}`;
+    }
+  } else if (known.length) {
     const best = Math.max(...known.map((item) => item.spend as number));
     pool = known.filter((item) => item.spend === best);
     basis = `spendPriority=${best}`;
