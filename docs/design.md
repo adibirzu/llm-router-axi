@@ -1,14 +1,18 @@
 # llm-router-axi design
 
-Status: **P2 design half.** This document and the policy schema/validator are
-shipped; routing behavior is not. `route`, `explain`, and `record` exist only as
-strict contract stubs that parse and validate their flags and then exit `1` with
-`NOT_IMPLEMENTED`. No code in this repo chooses a harness, model, or effort yet.
+Status: **P2 implementation.** The policy schema/validator and the routing
+behavior described below are shipped. `route`, `explain`, and `record` choose a
+harness/model/effort from the policy plus telemetry, print the decision, and
+persist cooldown and least-recent-use state. Selection, ranking, and fallback
+reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14 fixtures
+(`test/parity/selector-parity.test.ts` runs the pinned selector side by side);
+the frozen rejection strings below are the parity contract. Telemetry comes from
+`usage-axi --json --full` (or `--usage-json`).
 
 Program context: `axi-router-program` plan (P2). Upstream of this half is P1
-`usage-axi`, which produces the telemetry contract the router consumes; nothing
-here calls it. Downstream is P3, which wires firstmate onto the router and
-deletes the fork-only dispatch surface.
+`usage-axi`, which produces the telemetry contract the router consumes. Downstream
+is P3, which wires firstmate onto the router and deletes the fork-only dispatch
+surface.
 
 ## 1. Why a policy file
 
@@ -134,9 +138,9 @@ route --kind ship|scout|review|architecture|admin
 ```
 
 Inputs are the task descriptor plus a telemetry source (`--usage-json` for a
-fixture, otherwise `usage-axi --json --full` once P1 lands).
+fixture, otherwise `usage-axi --json --full`).
 
-Planned output, one TOON decision block:
+Output, one TOON decision block:
 
 ```
 decision:
@@ -145,22 +149,41 @@ decision:
   effort: medium
   provider: opencode
   pool: opencode-go
-  reason: "eligible fresh opencode-go headroom=…% reserve=20%"
-  fallbacks[]: {harness, model, provider, pool}
-  capacity: {ok: true, measured: {...}}
+  reason: "fresh window weekly headroom=93% reserve=20%"
+  fallbacks[]: {harness, model, effort, provider, pool}
+  capacity: {ok: true, measured: {...}, reasons: []}
 ```
 
 - `--json` emits the same object as JSON.
-- `--flags` prints exactly `--harness X --model Y --effort Z` for `fm-spawn`.
+- `--flags` prints exactly `--harness X --model Y --effort Z` for `fm-spawn`
+  (an unset axis is omitted; nothing else is printed).
 - `reason` and every fallback reuse the selector's diagnostic vocabulary (§5).
+
+**Provider identity** is resolved here, not by the caller. `claude`, `codex`,
+`grok`, `cursor`, and `agy` map to the same-named usage-axi provider; `opencode`
+maps to provider `opencode` with pool `opencode-go` or `opencode` chosen from
+the model prefix (`opencode-go/` vs `opencode/`); `copilot` and `cline` are
+routable when usage-axi carries their windows. The selector's fixed
+five-provider set is deliberately **not** carried forward.
+
+**Pool pricing** uses the candidate's declared pool (policy `pools` plus
+`pool`/`quotaWindow`): cursor `auto_usage`/`api_usage`, agy
+`gemini_5h`+`gemini_weekly` vs `claude_gpt_5h`+`claude_gpt_weekly`, opencode Go
+vs free. A candidate with no declared pool keeps the conservative provider-wide
+minimum. A declared window absent from telemetry fails closed; it is never
+repriced on a healthier window.
+
+**Capacity** folds `usage-axi machine{agents, agentCeiling, loadPerCore,
+memoryFreePct, suiteSlotFree}` against the policy thresholds; the fleet ceiling,
+load, memory reserve, and one-suite slot all refuse a route.
 
 ### 3.3 `explain`
 
-Same descriptor flags as `route` (and deliberately **not** `--flags`). Planned
-output is a `candidates[]` table — `harness, provider, pool, decision
-(eligible|refused), reason` — so an operator can see why each candidate was
-accepted or dropped. Rejection reasons are the frozen selector strings, not new
-prose.
+Same descriptor flags as `route` (and deliberately **not** `--flags`). Output is
+a `candidates[]` table — `harness, provider, pool, model, decision
+(eligible|refused), reason` — plus the `selected` candidate and `capacity`
+verdict, so an operator can see why each candidate was accepted or dropped.
+Rejection reasons are the frozen selector strings, not new prose.
 
 ### 3.4 `record`
 
@@ -170,13 +193,17 @@ record --provider <name> --outcome rate_limit|ok --task <id> [--json]
 
 Records a provider outcome so the router can apply a `routing.cooldownSeconds`
 cooldown and update its least-recent-use ledger under
-`~/.local/state/llm-router-axi`. Planned output is a receipt
-(`provider, outcome, task, cooldownUntil?, statePath`). This half persists
-nothing.
+`~/.local/state/llm-router-axi` (XDG-aware; `LLM_ROUTER_STATE_FILE` overrides
+the exact file for tests). Output is a receipt
+(`provider, outcome, task, cooldownUntil?, statePath`). `rate_limit` parks the
+provider; `ok` clears the cooldown. Selection writes the least-recent-use
+ledger; both persist across invocations.
 
-## 4. Routing pipeline (design; lands after P1)
+## 4. Routing pipeline (implemented)
 
-The order is fixed by selector parity, but none of it is implemented here.
+The order is fixed by selector parity. `src/router.ts` and `src/selector.ts`
+implement it; `src/usage.ts` owns provider identity and pool pricing, and
+`src/capacity.ts` owns the machine verdict.
 
 1. **Resolve the lane.** Join `(kind, difficulty)` to a lane and expand its
    ordered candidate chain.
@@ -240,10 +267,11 @@ in the selector: `FM_DISPATCH_QUOTA_AXI=<executable>` and
 
 ## 7. Non-goals for this half
 
-- Porting `fm-dispatch-select.mjs` or any ranking, fallback, or capacity verdict.
-- Calling `usage-axi` for live routing.
-- Persisting cooldown or least-recent-use state.
-- Choosing a harness/model anywhere. The stubs explicitly refuse.
+- Wiring firstmate onto the router (P3: shims, policy-generated crew-dispatch,
+  deletion of the moved fork code, the diff-shrink numbers).
+- Model fallback chains beyond the lane chain (`fm-model-fallback.sh` becomes a
+  `route --json` reader in P3); account selection.
+- `bin/fm-review.sh` becomes `review-axi`, which is separate and out of scope.
 
 ## 8. References
 

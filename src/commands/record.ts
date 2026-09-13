@@ -1,35 +1,39 @@
 import { AxiError } from "axi-sdk-js";
 
-import { parseArgs, requireEnum, type FlagSpec } from "../args.js";
-import { notImplemented } from "./not-implemented.js";
+import { parseArgs, requireEnum, requireInteger, type FlagSpec } from "../args.js";
+import { loadEffectivePolicy } from "../policy/index.js";
+import { collapseHome, helpBlock, toon } from "../render.js";
+import { setCooldown } from "../selector.js";
+import { dispatchStatePath, loadState, saveState, withStateLock } from "../state.js";
 
 const OUTCOME_VALUES = ["rate_limit", "ok"] as const;
 
 const RECORD_FLAGS: FlagSpec[] = [
-  { name: "--provider", value: "name", description: "Provider that hit the limit" },
+  { name: "--provider", value: "name", description: "Provider the outcome belongs to" },
   {
     name: "--outcome",
     value: "rate_limit|ok",
-    description: "Observed outcome",
+    description: "Verified rate-limit/quota failure, or a clean success",
   },
   { name: "--task", value: "id", description: "Task the outcome belongs to" },
+  { name: "--now", value: "epoch", description: "Fixed epoch second (test seam)" },
   { name: "--json", description: "Emit JSON instead of TOON" },
 ];
 
 export const RECORD_HELP = `usage: llm-router-axi record --provider <name> --outcome <rate_limit|ok> --task <id> [flags]
-description: Record a provider outcome so the router can apply cooldowns.
-  NOT IMPLEMENTED YET - this is the P2 design contract; it writes no state.
+description: Record a provider outcome so the router applies a cooldown.
 inputs:
   --provider <name>          provider id from usage-axi (claude, cursor, opencode, ...)
   --outcome <rate_limit|ok>  a verified rate-limit/quota failure, or a clean success
-  --task <id>                task id for the least-recent-use ledger
-outputs (planned):
+  --task <id>                task id for the receipt
+  --now <epoch>              fix the current epoch second (test seam)
+outputs:
   TOON receipt: provider, outcome, task, cooldownUntil (rate_limit only), statePath
   --json  the same receipt as JSON
-state (planned):
-  ~/.local/state/llm-router-axi/   cooldown + least-recent-use ledger (P2 runtime)
-flags[4]:
-  ${RECORD_FLAGS.map((flag) => flag.name).join(", ")}, --help
+state:
+  ~/.local/state/llm-router-axi   cooldown + least-recent-use ledger
+flags[${RECORD_FLAGS.length + 1}]:
+${RECORD_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}`).join(", ")}, --help
 examples:
   llm-router-axi record --provider cursor --outcome rate_limit --task t-42
   llm-router-axi record --provider claude --outcome ok --task t-42 --json
@@ -41,6 +45,7 @@ export async function recordCommand(args: string[]): Promise<string> {
   const provider = requireNonEmpty(values.get("--provider"), "--provider");
   const task = requireNonEmpty(values.get("--task"), "--task");
   const outcome = requireEnum(values.get("--outcome"), "--outcome", OUTCOME_VALUES);
+  const now = requireInteger(values.get("--now"), "--now");
 
   const missing = [
     provider === undefined ? "--provider" : undefined,
@@ -58,19 +63,48 @@ export async function recordCommand(args: string[]): Promise<string> {
     );
   }
 
-  return notImplemented(
-    "record",
-    {
-      provider: provider ?? null,
-      outcome: outcome ?? null,
-      task: task ?? null,
-      json: booleans.has("--json"),
-    },
-    [
-      "Run `llm-router-axi record --help` for the full contract",
-      "Cooldown state is not persisted in the P2 design build",
-    ],
-  );
+  const policy = loadEffectivePolicy();
+  if (!policy.ok) {
+    throw new AxiError(policy.message, "VALIDATION_ERROR", [
+      ...policy.issues.map((issue) => `${issue.path}: ${issue.message}`),
+      "Run `llm-router-axi policy validate` for the full issue list",
+    ]);
+  }
+  const cooldownSeconds = policy.policy.routing.cooldownSeconds;
+  const recordedAt = now ?? Math.floor(Date.now() / 1000);
+
+  const statePath = dispatchStatePath();
+  const receipt = withStateLock(() => {
+    const state = loadState();
+    if (outcome === "rate_limit") {
+      setCooldown(state, provider as string, "recorded-rate-limit-or-quota-failure", recordedAt, cooldownSeconds);
+      saveState(state);
+      return {
+        provider,
+        outcome,
+        task,
+        cooldownUntil: state.cooldowns[provider as string]?.until ?? null,
+        statePath: collapseHome(statePath),
+      };
+    }
+    delete state.cooldowns[provider as string];
+    saveState(state);
+    return {
+      provider,
+      outcome,
+      task,
+      cooldownUntil: null,
+      statePath: collapseHome(statePath),
+    };
+  }, statePath);
+
+  if (booleans.has("--json")) {
+    return JSON.stringify(receipt, null, 2);
+  }
+  return toon({ receipt }, helpBlock([
+    "Run `llm-router-axi route ...` to see the cooldown applied",
+    "Run `llm-router-axi explain ...` for per-provider reasons",
+  ]));
 }
 
 function requireNonEmpty(value: string | undefined, flag: string): string | undefined {
