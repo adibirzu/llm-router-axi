@@ -128,12 +128,12 @@ function policyInit(args: string[]): string {
     );
   }
 
-  const message =
-    outcome.action === "written"
-      ? `policy: wrote the bundled default to ${rendered}`
-      : outcome.action === "unchanged"
-        ? `policy: already initialized at ${rendered} (no-op)`
-        : `policy: already initialized at ${rendered}, differs from the bundled default`;
+  const messages: Record<"written" | "unchanged" | "differs", string> = {
+    written: `policy: wrote the bundled default to ${rendered}`,
+    unchanged: `policy: already initialized at ${rendered} (no-op)`,
+    differs: `policy: already initialized at ${rendered}, differs from the bundled default`,
+  };
+  const message = messages[outcome.action];
 
   return toon(
     {
