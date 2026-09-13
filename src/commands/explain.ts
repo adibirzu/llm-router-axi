@@ -93,7 +93,19 @@ export async function explainCommand(args: string[]): Promise<string> {
   if (booleans.has("--json")) {
     return JSON.stringify(payload, null, 2);
   }
-  return toon(payload, helpBlock([
+  // A nested object renders as a bare `selected:` block header, which reads as
+  // an empty value; join the axes into one inline line instead. With no
+  // selection there is nothing to show, so the line is omitted entirely.
+  const toonPayload: Record<string, unknown> = {
+    descriptor: payload.descriptor,
+    ...(selected
+      ? { selected: `${selected.harness}/${selected.model}/${selected.provider}` }
+      : {}),
+    reason: payload.reason,
+    capacity: payload.capacity,
+    candidates: payload.candidates,
+  };
+  return toon(toonPayload, helpBlock([
     "Run `llm-router-axi route ... --flags` to dispatch the chosen candidate",
     "Rejection reasons are the frozen firstmate selector strings (docs/design.md §5)",
   ]));

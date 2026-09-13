@@ -319,6 +319,54 @@ describe("explain", () => {
     expect(claude?.decision).toBe("refused");
     expect(claude?.reason).toContain("quota headroom 20% is at or below 20% reserve");
   });
+
+  it("prints the selected harness/model/provider inline in TOON", async () => {
+    const policy = cloneDefault();
+    policy.kinds.ship.medium.candidates = [
+      { harness: "claude", provider: "claude" },
+      { harness: "codex", provider: "codex" },
+    ];
+    writePolicy(policy);
+    const usageFile = writeJson(
+      "usage.json",
+      usage({ providers: [fresh("claude", 20), fresh("codex", 75)] }),
+    );
+
+    const { output, exitCode } = await run([
+      "explain",
+      "--kind",
+      "ship",
+      "--difficulty",
+      "medium",
+      "--usage-json",
+      usageFile,
+    ]);
+    expect(exitCode).toBe(0);
+    const line = output.split("\n").find((row) => row.startsWith("selected:"));
+    expect(line).toBe("selected: codex/harness-default/codex");
+  });
+
+  it("omits the selected line when no candidate is eligible", async () => {
+    const policy = cloneDefault();
+    policy.kinds.ship.medium.candidates = [{ harness: "claude", provider: "claude" }];
+    writePolicy(policy);
+    const usageFile = writeJson(
+      "usage.json",
+      usage({ providers: [fresh("claude", 20)] }),
+    );
+
+    const { output, exitCode } = await run([
+      "explain",
+      "--kind",
+      "ship",
+      "--difficulty",
+      "medium",
+      "--usage-json",
+      usageFile,
+    ]);
+    expect(exitCode).toBe(0);
+    expect(output.split("\n").some((row) => row.startsWith("selected:"))).toBe(false);
+  });
 });
 
 describe("record", () => {
