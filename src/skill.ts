@@ -70,6 +70,7 @@ npx -y ${BIN} select --quota-json usage.json '[{"harness":"claude"},{"harness":"
 npx -y ${BIN} route chain --harness opencode --model opencode-go/qwen3.8-flash
 npx -y ${BIN} explain --kind review --difficulty hard --surface docs
 npx -y ${BIN} capacity check
+npx -y ${BIN} capacity --for suite
 npx -y ${BIN} record --provider cursor --outcome rate_limit --task t-42
 \`\`\`
 
@@ -84,7 +85,10 @@ array) and prints one compact launch profile, so \`fm-dispatch-select.mjs\` can
 become a shim. \`route chain\` walks the policy \`modelFallback\` /
 \`fallbackLanes\` step-down, so \`fm-model-fallback.sh\` can read it. \`capacity\`
 reports the machine gauges (memory free percent, memory pressure, swap, agent
-count, load, suite slot) against the policy thresholds.
+count, load, suite slot) against the policy thresholds. Spawn admission (the
+default, and the only thing \`route\` uses) never refuses because a test suite is
+running; \`capacity --for suite\` is the gate a suite start calls, and it refuses
+when \`oneSuiteAtATime\` is true and the slot is occupied.
 
 Rejection reasons in \`explain\` and \`select\` reuse the frozen firstmate selector
 strings, so the router and \`fm-dispatch-select.mjs\` stay at parity.

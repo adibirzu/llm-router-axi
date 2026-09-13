@@ -214,7 +214,11 @@ repriced on a healthier window.
 memoryFreePct, suiteSlotFree}` over the local gauges
 (`src/machine.ts`, ported from `fm-capacity-lib.sh`) against the policy
 thresholds: worker-root agent count, load per core, free-memory reserve, memory
-pressure level, optional swap ceiling, and the one-suite slot. `memoryFreePct`
+pressure level, optional swap ceiling, and the one-suite slot. The one-suite rule
+is an admission purpose, not a blanket refusal: a `spawn` verdict (the default,
+and the only one `route` uses) never refuses because a suite is running and keeps
+the slot as context, while a `suite` verdict (`capacity --for suite`) refuses when
+`oneSuiteAtATime` is true and the slot is occupied. `memoryFreePct`
 for the captain's Mac rests at 13-22 percent, so the default reserve is **10**
 and `memoryPressureMax` defaults to `warn` (only `critical` refuses); a gauge
 that cannot be measured is reported but never refuses on its own.
@@ -263,9 +267,12 @@ come from the policy `routing` block, overridable by flag.
 
 ### 3.6 `capacity` and `classify-evidence`
 
-`capacity [check] [--json]` reports the machine gauges and the policy verdict;
-`check` exits `1` when the policy would refuse. This is the surface
-`bin/fm-capacity.sh` shims onto in P3. `classify-evidence [--file <path>]`
+`capacity [check] [--for <spawn|suite>] [--json]` reports the machine gauges and
+the policy verdict. The default `spawn` purpose (what an agent spawn asks) never
+refuses on the suite slot; `--for suite` refuses when `oneSuiteAtATime` is true
+and the slot is occupied and `check`/`--for suite` exit `1` on a refusal. This is
+the surface `bin/fm-capacity.sh` and `fm-test-run.sh` shim onto in P3.
+`classify-evidence [--file <path>]`
 exposes the shared depletion detector (stdin default) and prints
 `classification=none` or `classification=depleted` plus the matched signature.
 
@@ -301,9 +308,10 @@ implement it; `src/usage.ts` owns provider identity and pool pricing, and
 5. **Fallbacks.** Emit the next `maxFallbacks` eligible candidates in lane
    order.
 6. **Capacity verdict.** Fold in `usage-axi machine{}`: refuse when the fleet is
-   at `agentCeiling`, when load per core exceeds `maxLoadPerCore`, when memory
-   free is under `memoryFreeReservePercent`, or when `oneSuiteAtATime` and the
-   suite slot is taken. The verdict is `capacity{ok, measured}`.
+   at `agentCeiling`, when load per core exceeds `maxLoadPerCore`, or when memory
+   free is under `memoryFreeReservePercent`. A `route` spawn admission also never
+   refuses on the suite slot; the `oneSuiteAtATime` refusal is confined to the
+   `capacity --for suite` purpose. The verdict is `capacity{ok, measured}`.
 7. **Accounts.** Where several accounts exist, select the one the ledger marks
    least recently used (ported from `fm-accounts-lib.sh`).
 

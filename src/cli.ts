@@ -29,6 +29,7 @@ examples:
   llm-router-axi route chain --harness opencode --model opencode-go/qwen3.8-flash
   llm-router-axi explain --kind review --difficulty hard --surface docs
   llm-router-axi capacity check
+  llm-router-axi capacity --for suite
   llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 `;
 
