@@ -1,0 +1,10 @@
+{
+  "agents": 1,
+  "agentCeiling": 50,
+  "loadPerCore": 0.1,
+  "memoryFreePct": 60,
+  "memoryPressure": "normal",
+  "swapUsedPct": 5,
+  "swapouts": 0,
+  "suiteSlotFree": true
+}

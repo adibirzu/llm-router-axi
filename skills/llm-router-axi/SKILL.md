@@ -11,10 +11,10 @@ description: >
 
 Policy-driven LLM router: task descriptor plus live usage in, one harness/model/effort decision out.
 
-Status: **P2 implementation.** `route`, `explain`, and `record` are live.
-Selection, ranking, fallback, and the machine capacity verdict reproduce the
-firstmate `fm-dispatch-select.mjs` selector on its 14 fixtures; the doctrine
-itself stays in the policy file, never in code.
+Status: **P2b implementation.** `route`, `select`, `explain`, `capacity`, and
+`record` are live. Selection, ranking, fallback, and the machine capacity
+verdict reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14
+fixtures; the doctrine itself stays in the policy file, never in code.
 
 Run it without a global install:
 
@@ -42,11 +42,21 @@ the doctrine declared once: workers use OpenCode Go first, then free Zen ids,
 then the Grok/Cursor/Gemini subscriptions; architects are Claude/Codex;
 reviewers are Grok/Gemini(agy)/Cursor.
 
+The same file carries the in-run step-down doctrine under `modelFallback`
+(harness to ordered model ids), `fallbackLanes` (lane order), and
+`modelFallbackCycles`, using the exact keys firstmate's
+`config/crew-dispatch.json` uses. It also carries the `capacity` thresholds
+(`memoryFreeReservePercent` 10, `memoryPressureMax`, `maxSwapUsedPercent`,
+`agentCeiling`, `maxLoadPerCore`, `oneSuiteAtATime`).
+
 ## Commands
 
 ```sh
 npx -y llm-router-axi route --kind ship --difficulty medium --surface backend [--flags] [--json]
+npx -y llm-router-axi select --quota-json usage.json '[{"harness":"claude"},{"harness":"codex"}]'
+npx -y llm-router-axi route chain --harness opencode --model opencode-go/qwen3.8-flash
 npx -y llm-router-axi explain --kind review --difficulty hard --surface docs
+npx -y llm-router-axi capacity check
 npx -y llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 ```
 
@@ -54,11 +64,20 @@ npx -y llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 fallbacks[], capacity{ok,measured}`. `--json` emits the same decision as JSON;
 `--flags` prints exactly `--harness X --model Y --effort Z` for fm-spawn.
 
-`route` reads usage from `usage-axi --json --full` by default; pass
-`--usage-json <path>` to route from a fixture.
+`select` accepts firstmate's rule/profile-array input shape
+(`harness/provider/model/effort/quotaWindow`, a `{use:[...]}` rule, or an
+array) and prints one compact launch profile, so `fm-dispatch-select.mjs` can
+become a shim. `route chain` walks the policy `modelFallback` /
+`fallbackLanes` step-down, so `fm-model-fallback.sh` can read it. `capacity`
+reports the machine gauges (memory free percent, memory pressure, swap, agent
+count, load, suite slot) against the policy thresholds.
 
-Rejection reasons in `explain` reuse the frozen firstmate selector strings, so
-the router and `fm-dispatch-select.mjs` stay at parity.
+Rejection reasons in `explain` and `select` reuse the frozen firstmate selector
+strings, so the router and `fm-dispatch-select.mjs` stay at parity.
+
+`route`/`explain` read usage from `usage-axi --json --full` by default; pass
+`--usage-json <path>` to route from a fixture. A fresh usage-axi document is
+cached and reused so a route does not re-pay the slow OpenUsage refresh.
 
 `record --outcome rate_limit` parks the provider for the policy
 `routing.cooldownSeconds`; `record --outcome ok` clears it. Cooldown and
