@@ -76,6 +76,13 @@ export interface MachineTelemetry {
   loadPerCore?: number | null;
   memoryFreePct?: number | null;
   suiteSlotFree?: boolean | null;
+  /**
+   * Additive gauges a future usage-axi may carry (the router otherwise reads
+   * them from local probes). `memoryPressure` is normal|warn|critical.
+   */
+  memoryPressure?: "normal" | "warn" | "critical" | null;
+  swapUsedPct?: number | null;
+  swapouts?: number | null;
 }
 
 export type QuotaRead =

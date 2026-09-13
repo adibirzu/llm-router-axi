@@ -36,6 +36,8 @@ export function evaluateDescriptor(request: DescriptorRequest): DescriptorEvalua
   const now = request.now ?? Math.floor(Date.now() / 1000);
   const quota = loadUsage({
     ...(request.usageJson ? { usageJson: request.usageJson } : {}),
+    maxAgeSeconds: read.policy.routing.telemetryMaxAgeSeconds,
+    now,
   });
 
   const result = withStateLock(() => {

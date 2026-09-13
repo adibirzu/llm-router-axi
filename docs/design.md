@@ -1,13 +1,18 @@
 # llm-router-axi design
 
-Status: **P2 implementation.** The policy schema/validator and the routing
-behavior described below are shipped. `route`, `explain`, and `record` choose a
-harness/model/effort from the policy plus telemetry, print the decision, and
-persist cooldown and least-recent-use state. Selection, ranking, and fallback
-reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14 fixtures
-(`test/parity/selector-parity.test.ts` runs the pinned selector side by side);
-the frozen rejection strings below are the parity contract. Telemetry comes from
-`usage-axi --json --full` (or `--usage-json`).
+Status: **P2b implementation (shim-first).** The policy schema/validator and the
+routing behavior described below are shipped, plus the three surfaces P3b needs
+to delete the fork's dispatch code: `select` (arbitrary-profile selection), the
+`route chain` step-down walk, and the `capacity` machine gauges. `route`,
+`select`, `explain`, and `record` choose a harness/model/effort from the policy
+plus telemetry, print the decision, and persist cooldown and least-recent-use
+state. Selection, ranking, and fallback reproduce the firstmate
+`fm-dispatch-select.mjs` selector on its 14 fixtures
+(`test/parity/selector-parity.test.ts` runs the pinned selector side by side,
+`test/select.test.ts` runs it through the `select` CLI); the frozen rejection
+strings below are the parity contract. Telemetry comes from
+`usage-axi --json --full` (or `--usage-json`), reusing a fresh cached document so
+a route does not re-pay the slow OpenUsage refresh.
 
 Program context: `axi-router-program` plan (P2). Upstream of this half is P1
 `usage-axi`, which produces the telemetry contract the router consumes. Downstream
@@ -48,11 +53,33 @@ Top-level keys (all required; unknown keys are refused):
 |---|---|
 | `version` | Schema version, currently `1`. |
 | `routing` | `reservePercent` (20), `cooldownSeconds` (1800), `telemetryMaxAgeSeconds` (300), `maxFallbacks` (4). |
-| `capacity` | `agentCeiling` (10), `oneSuiteAtATime` (true), `memoryFreeReservePercent` (20), `maxLoadPerCore` (2). |
+| `capacity` | `agentCeiling` (10), `oneSuiteAtATime` (true), `memoryFreeReservePercent` (**10**), `maxLoadPerCore` (2), `memoryPressureMax` (`warn`), `maxSwapUsedPercent` (`null`). |
 | `pools` | Split-pool window ids: cursor `auto_usage`/`api_usage`, agy `gemini_5h`/`gemini_weekly` vs `claude_gpt_5h`/`claude_gpt_weekly`, opencode `opencode-go`/`opencode`. |
 | `spendPriority` | `weight`, `tieBreaker` (`least-recent-use` \| `declared-order`), `preferKnown`. |
 | `candidateGroups` | Named, ordered candidate lists. |
 | `kinds` | Lanes keyed by kind, then difficulty. |
+| `modelFallback` / `_model_fallback` | harness to ordered model ids for in-run step-down (below). |
+| `fallbackLanes` | Ordered harness lanes an exhausted chain moves to. |
+| `modelFallbackCycles` | Harnesses whose chain wraps to its head instead of exhausting. |
+
+### 2.4 In-run step-down (`modelFallback`)
+
+The policy carries the same step-down keys as firstmate's
+`config/crew-dispatch.json`, so `bin/fm-model-fallback.sh` can read the chain
+from the router in P3:
+
+| firstmate `config/crew-dispatch.json` | llm-router-axi `policy.json` |
+|---|---|
+| `modelFallback` | `modelFallback` (legacy alias `_model_fallback`, refused together) |
+| `fallbackLanes` | `fallbackLanes` |
+| `modelFallbackCycles` | `modelFallbackCycles` |
+| `subscriptionRouting.reservePercent` etc. | `routing.*` |
+
+`route chain --harness H [--model M]` reproduces the fork script's walk: the
+entry after the recorded model, a model outside its chain steps to the chain
+head, a walked-out cyclic lane wraps to its head, else the next
+`fallbackLanes` harness, else `exhausted`. `fm-model-fallback.sh` keeps its
+evidence classification and cursor; only the chain walk moves here.
 
 ### 2.1 Candidate groups
 
@@ -174,8 +201,13 @@ minimum. A declared window absent from telemetry fails closed; it is never
 repriced on a healthier window.
 
 **Capacity** folds `usage-axi machine{agents, agentCeiling, loadPerCore,
-memoryFreePct, suiteSlotFree}` against the policy thresholds; the fleet ceiling,
-load, memory reserve, and one-suite slot all refuse a route.
+memoryFreePct, suiteSlotFree}` over the local gauges
+(`src/machine.ts`, ported from `fm-capacity-lib.sh`) against the policy
+thresholds: worker-root agent count, load per core, free-memory reserve, memory
+pressure level, optional swap ceiling, and the one-suite slot. `memoryFreePct`
+for the captain's Mac rests at 13-22 percent, so the default reserve is **10**
+and `memoryPressureMax` defaults to `warn` (only `critical` refuses); a gauge
+that cannot be measured is reported but never refuses on its own.
 
 ### 3.3 `explain`
 
@@ -199,6 +231,40 @@ the exact file for tests). Output is a receipt
 provider; `ok` clears the cooldown. Selection writes the least-recent-use
 ledger; both persist across invocations.
 
+### 3.5 `select` (arbitrary-profile compatibility)
+
+```
+select [--quota-json <file>] [--now <epoch>] [--reserve-percent N]
+       [--telemetry-max-age-seconds N] [--cooldown-seconds N] [--json] [<json>]
+```
+
+Accepts firstmate's `fm-dispatch-select.mjs select` input shape: one profile,
+a `{use:[...]}` rule object, or a non-empty profile array, on the command line
+or stdin. A profile is `harness`, `provider`, `model`, `effort`, `quotaWindow`;
+`harness` must be one of the fork's verified set and the resolved provider one
+of `claude|codex|grok|cursor|agy`. Every refusal string is the fork's own
+(`src/dispatch-profiles.ts`). The same `src/selector.ts` engine runs, so
+eligibility, ranking, and diagnostics match `route`. Stdout is exactly the one
+compact launch profile `{harness, provider, model?, effort?}` (the pricing
+`quotaWindow` is stripped); stderr carries the per-candidate diagnostics; exit
+is `0` selected, `2` configuration error, `3` no capacity evidence. Settings
+come from the policy `routing` block, overridable by flag.
+
+### 3.6 `capacity` and `classify-evidence`
+
+`capacity [check] [--json]` reports the machine gauges and the policy verdict;
+`check` exits `1` when the policy would refuse. This is the surface
+`bin/fm-capacity.sh` shims onto in P3. `classify-evidence [--file <path>]`
+exposes the shared depletion detector (stdin default) and prints
+`classification=none` or `classification=depleted` plus the matched signature.
+
+### 3.7 `route chain`
+
+`route chain --harness H [--model M] [--json]` walks the policy
+`modelFallback`/`fallbackLanes`/`modelFallbackCycles` step-down and prints
+`action=harness-step|lane-move|exhausted`, `to_model`, `to_harness`, and the
+chain. It is the surface `bin/fm-model-fallback.sh` reads in P3.
+
 ## 4. Routing pipeline (implemented)
 
 The order is fixed by selector parity. `src/router.ts` and `src/selector.ts`
@@ -207,8 +273,10 @@ implement it; `src/usage.ts` owns provider identity and pool pricing, and
 
 1. **Resolve the lane.** Join `(kind, difficulty)` to a lane and expand its
    ordered candidate chain.
-2. **Load telemetry.** `usage-axi --json --full` (or `--usage-json`). Stale or
-   undated telemetry fails closed.
+2. **Load telemetry.** A fresh cached `usage-axi` document when one exists,
+   else `usage-axi --json --full` (or `--usage-json`). The subprocess budget is
+   200s to clear the measured 82-180s OpenUsage refresh, and a successful read is
+   cached so the next route is instant. Stale or undated telemetry fails closed.
 3. **Eligibility.** For each candidate: telemetry present and fresh
    (`telemetryMaxAgeSeconds`), provider not in cooldown, declared
    quota window present and usable, and headroom above `reservePercent`.
@@ -252,9 +320,9 @@ Once parity tests pass, P3 replaces three scripts with router calls:
 
 | Fork-only file | Becomes |
 |---|---|
-| `bin/fm-dispatch-select.mjs` (755 lines) | `llm-router-axi route --json`; the script becomes a thin shim only while upstream still expects it. |
-| `bin/fm-model-fallback.sh` (380 lines) | Reads its chain from `llm-router-axi route --json`. |
-| `bin/fm-capacity.sh` + `fm-capacity-lib.sh` (901 lines) | `usage-axi machine` for measurement; the router's `capacity{ok}` folds the doctrine. |
+| `bin/fm-dispatch-select.mjs` (755 lines) | `llm-router-axi select` (arbitrary profiles) plus `route`/`record`/`classify-evidence`; the script becomes a thin shim only while upstream still expects it. |
+| `bin/fm-model-fallback.sh` (380 lines input) | Reads its chain from `llm-router-axi route chain`. |
+| `bin/fm-capacity.sh` + `fm-capacity-lib.sh` (901 lines) | `llm-router-axi capacity` (gauges + verdict) over `usage-axi machine{}` and the local probes. |
 | `config/crew-dispatch.json` | Generated from the router policy, or replaced by a one-line pointer. |
 
 Target: shrink the fork's dispatch-surface diff versus upstream from ~3,648

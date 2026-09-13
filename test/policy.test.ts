@@ -83,6 +83,16 @@ describe("default policy", () => {
     expect(policy.pools.opencode.free).toBe("opencode");
   });
 
+  it("declares the in-run step-down doctrine and the memory gauges", () => {
+    const policy = readDefaultPolicy();
+    expect(policy.modelFallback?.opencode?.[0]).toBe("opencode-go/deepseek-v4.1-flash");
+    expect(policy.fallbackLanes).toEqual(["opencode", "grok", "cursor", "agy", "claude"]);
+    expect(policy.modelFallbackCycles).toContain("opencode");
+    expect(policy.capacity.memoryFreeReservePercent).toBe(10);
+    expect(policy.capacity.memoryPressureMax).toBe("warn");
+    expect(policy.capacity.maxSwapUsedPercent).toBeNull();
+  });
+
   it("fans a shared candidate group into all three difficulties", () => {
     const policy = readDefaultPolicy();
     for (const difficulty of ["easy", "medium", "hard"] as const) {
@@ -171,5 +181,31 @@ describe("malformed policy refusal", () => {
     expect(validatePolicy([]).ok).toBe(false);
     expect(validatePolicy("policy").ok).toBe(false);
     expect(validatePolicy(null).ok).toBe(false);
+  });
+
+  it("refuses modelFallback and its legacy alias together", () => {
+    const policy = cloneDefault();
+    policy._model_fallback = { claude: ["a", "b"] };
+    const result = validatePolicy(policy);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues.some((issue) => issue.path === "/_model_fallback")).toBe(true);
+    }
+  });
+
+  it("refuses a cyclic lane whose chain has fewer than two models", () => {
+    const policy = cloneDefault();
+    policy.modelFallback = { claude: ["only-one"] };
+    const result = validatePolicy(policy);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues.some((issue) => issue.message.includes("at least two model ids"))).toBe(true);
+    }
+  });
+
+  it("refuses a modelFallback key that is not a routable harness", () => {
+    const policy = cloneDefault();
+    policy.modelFallback = { "not-a-harness": ["a"] };
+    expect(validatePolicy(policy).ok).toBe(false);
   });
 });

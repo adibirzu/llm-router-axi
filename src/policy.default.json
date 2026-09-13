@@ -10,8 +10,10 @@
   "capacity": {
     "agentCeiling": 10,
     "oneSuiteAtATime": true,
-    "memoryFreeReservePercent": 20,
-    "maxLoadPerCore": 2
+    "memoryFreeReservePercent": 10,
+    "maxLoadPerCore": 2,
+    "memoryPressureMax": "warn",
+    "maxSwapUsedPercent": null
   },
   "pools": {
     "cursor": {
@@ -118,6 +120,28 @@
       { "harness": "agy", "provider": "agy", "pool": "gemini" }
     ]
   },
+  "modelFallback": {
+    "claude": ["sonnet", "opus", "haiku"],
+    "agy": [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-2.5-flash"
+    ],
+    "cursor": ["auto", "cursor-grok-4.6-high"],
+    "opencode": [
+      "opencode-go/deepseek-v4.1-flash",
+      "opencode-go/muse-spark-1.3-contributor",
+      "opencode-go/qwen3.8-flash",
+      "opencode-go/kimi-k2.7-code",
+      "opencode/big-pickle",
+      "opencode/muse-spark-1.3-contributor-free",
+      "opencode/mimo-v2.5-free",
+      "opencode/nemotron-3.5-lightning-free"
+    ]
+  },
+  "fallbackLanes": ["opencode", "grok", "cursor", "agy", "claude"],
+  "modelFallbackCycles": ["opencode", "cursor", "agy", "claude"],
   "kinds": {
     "architecture": {
       "easy": { "effort": "medium", "candidates": ["architects"] },

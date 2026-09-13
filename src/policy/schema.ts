@@ -101,6 +101,18 @@ export const POLICY_SCHEMA = {
           maximum: 64,
           description: "Maximum 1-minute load per core before routing refuses.",
         },
+        memoryPressureMax: {
+          enum: ["normal", "warn", "ignore"],
+          description:
+            "Worst kernel memory-pressure level still admitted: normal refuses on warn, warn refuses only on critical, ignore never refuses on pressure.",
+        },
+        maxSwapUsedPercent: {
+          type: ["integer", "null"],
+          minimum: 0,
+          maximum: 100,
+          description:
+            "Swap-in-use ceiling in percent; null reports swap without refusing.",
+        },
       },
     },
     pools: {
@@ -180,6 +192,46 @@ export const POLICY_SCHEMA = {
         "Named, ordered candidate lists. Lanes reference a group by name so the worker/reviewer/architect doctrine is declared once.",
     },
     kinds: { $ref: "#/definitions/kinds" },
+    modelFallback: {
+      type: "object",
+      propertyNames: { $ref: "#/definitions/harness" },
+      additionalProperties: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: { type: "string", minLength: 1 },
+      },
+      description:
+        "In-run step-down chains, harness -> ordered model ids. Same key as firstmate config/crew-dispatch.json modelFallback.",
+    },
+    _model_fallback: {
+      type: "object",
+      propertyNames: { $ref: "#/definitions/harness" },
+      additionalProperties: {
+        type: "array",
+        minItems: 1,
+        uniqueItems: true,
+        items: { type: "string", minLength: 1 },
+      },
+      description:
+        "Legacy alias for modelFallback, honored only when modelFallback is absent (firstmate parity).",
+    },
+    fallbackLanes: {
+      type: "array",
+      minItems: 1,
+      uniqueItems: true,
+      items: { $ref: "#/definitions/harness" },
+      description:
+        "Ordered harness lanes an exhausted in-run chain may move to. Same key as firstmate config/crew-dispatch.json fallbackLanes.",
+    },
+    modelFallbackCycles: {
+      type: "array",
+      minItems: 1,
+      uniqueItems: true,
+      items: { $ref: "#/definitions/harness" },
+      description:
+        "Harnesses whose in-run chain wraps to its head instead of exhausting. Same key as firstmate config/crew-dispatch.json modelFallbackCycles.",
+    },
   },
   definitions: {
     effort: { enum: ["low", "medium", "high"] },

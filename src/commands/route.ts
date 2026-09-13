@@ -9,6 +9,7 @@ import {
   KIND_VALUES,
   SURFACE_VALUES,
 } from "./descriptor.js";
+import { chainCommand } from "./chain.js";
 import { evaluateDescriptor } from "./evaluate.js";
 import { helpBlock, toon } from "../render.js";
 import type { RouterResult } from "../router.js";
@@ -42,6 +43,12 @@ examples:
 `;
 
 export async function routeCommand(args: string[]): Promise<string> {
+  if (args[0] === "chain") {
+    return chainCommand(args.slice(1));
+  }
+  if (args.includes("--help") || args.includes("-h")) {
+    return ROUTE_HELP;
+  }
   const { values, booleans } = parseArgs("route", args, ROUTE_FLAGS);
 
   const kind = requireEnum(values.get("--kind"), "--kind", KIND_VALUES);
