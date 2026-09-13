@@ -195,4 +195,34 @@ describe("top-level surface", () => {
     expect(output).toContain("reservePercent");
     expect(output).toContain("agentCeiling");
   });
+
+  it("lists the select, chain, capacity, and classify surfaces in help", async () => {
+    const { output, exitCode } = await run(["--help"]);
+    expect(exitCode).toBe(0);
+    expect(output).toContain("select");
+    expect(output).toContain("capacity");
+    expect(output).toContain("route chain");
+
+    const selectHelp = await run(["select", "--help"]);
+    expect(selectHelp.output).toContain("--quota-json");
+    expect(selectHelp.output).toContain("quotaWindow");
+
+    const capacityHelp = await run(["capacity", "--help"]);
+    expect(capacityHelp.output).toContain("memory pressure");
+
+    const chainHelp = await run(["route", "chain", "--help"]);
+    expect(chainHelp.output).toContain("fallbackLanes");
+  });
+
+  it("classifies depletion evidence from a file", async () => {
+    const file = join(dir, "status");
+    writeFileSync(file, "failed: request failed with status code 429\n");
+    const depleted = await run(["classify-evidence", "--file", file]);
+    expect(depleted.exitCode).toBe(0);
+    expect(depleted.output).toContain("classification=depleted");
+
+    writeFileSync(file, "working: context token limit reached\n");
+    const benign = await run(["classify-evidence", "--file", file]);
+    expect(benign.output).toContain("classification=none");
+  });
 });

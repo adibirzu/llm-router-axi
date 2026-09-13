@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
-
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
 
+import { stateDir } from "./policy/index.js";
 import type { Candidate, Policy } from "./policy/types.js";
 import type { EngineProfile, QuotaProvider, QuotaRead, QuotaTelemetry } from "./selector.js";
 
@@ -17,31 +18,21 @@ const NATIVE_PROVIDER: ReadonlyMap<string, string> = new Map([
 const DEFAULT_USAGE_AXI = "usage-axi";
 
 /**
- * Load the usage-axi document: `usage-axi --json --full` by default, or a
- * fixture via `--usage-json`. `machine{}` rides in the same document.
+ * The subprocess budget for one `usage-axi --json --full`. usage-axi is
+ * cache-first, but a stale OpenUsage cache can make it refresh seven providers
+ * in ~82-180s on the captain's Mac, so the ceiling must clear that slow path.
+ * The old 20s budget killed the read mid-refresh and swallowed the failure.
  */
-export function loadUsage(options: { usageJson?: string } = {}): QuotaRead {
-  let text: string;
-  if (options.usageJson) {
-    try {
-      text = readFileSync(options.usageJson, "utf8");
-    } catch {
-      return { available: false, reason: "quota fixture unreadable" };
-    }
-  } else {
-    const executable = process.env.LLM_ROUTER_USAGE_AXI ?? DEFAULT_USAGE_AXI;
-    const result = spawnSync(executable, ["--json", "--full"], {
-      encoding: "utf8",
-      timeout: 20000,
-      maxBuffer: 8 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    if (result.error || result.status !== 0) {
-      return { available: false, reason: "quota-axi unavailable" };
-    }
-    text = result.stdout;
-  }
+export const USAGE_AXI_TIMEOUT_MS = 200_000;
 
+/** Where a fresh usage-axi document is cached to keep a route from waiting. */
+export function usageCachePath(): string {
+  const override = process.env.LLM_ROUTER_USAGE_CACHE;
+  if (override && override.length > 0) return override;
+  return join(stateDir(), "usage-cache.json");
+}
+
+function parseDocument(text: string): QuotaRead {
   try {
     const data = JSON.parse(text) as QuotaTelemetry;
     if (!data || !Array.isArray(data.providers)) throw new Error("shape");
@@ -49,6 +40,71 @@ export function loadUsage(options: { usageJson?: string } = {}): QuotaRead {
   } catch {
     return { available: false, reason: "quota telemetry malformed" };
   }
+}
+
+/** A cached document is usable only when its generatedAt is within `maxAge`. */
+function readFreshCache(path: string, now: number, maxAgeSeconds: number): QuotaRead | null {
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+  const read = parseDocument(text);
+  if (!read.available) return null;
+  const generated = Date.parse(read.data.generatedAt ?? "");
+  if (!Number.isFinite(generated)) return null;
+  const age = now - Math.floor(generated / 1000);
+  if (age < -60 || age > maxAgeSeconds) return null;
+  return read;
+}
+
+function writeCache(path: string, data: QuotaTelemetry): void {
+  try {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    writeFileSync(path, `${JSON.stringify(data)}\n`, { mode: 0o600 });
+  } catch {
+    // A cache write failure must never fail a route; the live read already won.
+  }
+}
+
+/**
+ * Load the usage-axi document: a fresh cached document when one is available,
+ * else `usage-axi --json --full` (or a fixture via `--usage-json`). A fresh
+ * cache is preferred so a route does not re-pay the slow OpenUsage refresh; a
+ * stale cache is ignored and the tool is asked again.
+ */
+export function loadUsage(
+  options: { usageJson?: string; maxAgeSeconds?: number; now?: number } = {},
+): QuotaRead {
+  if (options.usageJson) {
+    try {
+      return parseDocument(readFileSync(options.usageJson, "utf8"));
+    } catch {
+      return { available: false, reason: "quota fixture unreadable" };
+    }
+  }
+
+  const now = options.now ?? Math.floor(Date.now() / 1000);
+  const cachePath = usageCachePath();
+  if (options.maxAgeSeconds !== undefined) {
+    const cached = readFreshCache(cachePath, now, options.maxAgeSeconds);
+    if (cached) return cached;
+  }
+
+  const executable = process.env.LLM_ROUTER_USAGE_AXI ?? DEFAULT_USAGE_AXI;
+  const result = spawnSync(executable, ["--json", "--full"], {
+    encoding: "utf8",
+    timeout: USAGE_AXI_TIMEOUT_MS,
+    maxBuffer: 8 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (result.error || result.status !== 0) {
+    return { available: false, reason: "quota-axi unavailable" };
+  }
+  const parsed = parseDocument(result.stdout);
+  if (parsed.available) writeCache(cachePath, parsed.data);
+  return parsed;
 }
 
 type ProviderResolution = { provider: string } | { error: string };
