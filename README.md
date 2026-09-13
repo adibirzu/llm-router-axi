@@ -1,7 +1,8 @@
 # llm-router-axi
 
-AXI: policy-driven LLM router that turns a task descriptor plus live usage into
-one harness/model/effort decision with a fallback chain and the exact spawn flags.
+Part of AXI ([https://axi.md/](https://axi.md/)). A policy-driven LLM router that
+turns a task descriptor plus live usage into one harness/model/effort decision
+with a fallback chain and the exact spawn flags.
 
 ```
 route --kind ship --difficulty medium --surface backend
@@ -9,12 +10,13 @@ route --kind ship --difficulty medium --surface backend
   -> --harness opencode --model opencode-go/deepseek-v4.1-flash --effort medium
 ```
 
-> **Status: implementation (P2).** The policy schema and validator are live, and
-> `route`, `explain`, and `record` are implemented. Eligibility and diagnostics
-> reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14 fixtures;
-> `route` ranks by the lane's declared chain order (spendPriority/headroom only
-> break same-rank ties), while `select` keeps the fork's spendPriority rotation.
-> Usage comes from `usage-axi --json --full`. See
+> **Status: implementation (P2c).** The policy schema/validator are live, and
+> `route`, `select`, `route chain`, `explain`, `record`, and `capacity` are
+> implemented. Eligibility, the frozen rejection strings, and `select`'s
+> spendPriority rotation reproduce the firstmate `fm-dispatch-select.mjs` selector
+> on its 14 fixtures. `route` ranks by the lane's declared chain order: the
+> lowest-ranked eligible candidate wins, and headroom/spendPriority only break
+> same-rank ties. Telemetry comes cache-first from `usage-axi --json --full`. See
 > [docs/design.md](docs/design.md).
 
 ## Why
@@ -24,15 +26,18 @@ Firstmate's fork carried ~3,600 lines of dispatch/fallback/capacity logic.
 decision into one CLI, so the fork can shrink to thin shims and stay close to
 upstream.
 
-## Install / run
+## Install
 
 ```sh
-npx -y llm-router-axi policy show
-npm install -g llm-router-axi
-llm-router-axi --version
+git clone https://github.com/adibirzu/llm-router-axi
+cd llm-router-axi
+npm ci
+npm run build
+npm install -g --prefix ~/.local .
 ```
 
-Node 22+, no native dependencies, ARM64-clean.
+This puts `llm-router-axi` on `PATH` at `~/.local/bin`. Node 22+, no native
+dependencies, ARM64-clean.
 
 ## Policy
 
@@ -54,27 +59,56 @@ truth. The seed doctrine is [src/policy.default.json](src/policy.default.json).
 Default doctrine: Claude/Codex architect and coordinator; Grok/Gemini(agy)/Cursor
 second-level reviewers; workers on OpenCode Go first, then free Zen ids, then the
 Grok/Cursor/Gemini subscriptions. Machine ceiling 10 agents, one test suite at a
-time, 20% memory reserve.
+time, `memoryFreeReservePercent` **10** (the captain's Mac rests at 13–22% free).
 
 ## Commands
 
 ```sh
 llm-router-axi route --kind ship --difficulty medium --surface backend [--flags]
+llm-router-axi route chain --harness opencode --model opencode-go/qwen3.8-flash
+llm-router-axi select --json '<profile or rule>'
 llm-router-axi explain --kind review --difficulty hard --surface docs
 llm-router-axi record --provider cursor --outcome rate_limit --task t-42
+llm-router-axi capacity check
 ```
 
 - `route` picks harness/model/effort/provider/pool with a `reason`, ordered
-  `fallbacks[]`, and `capacity{ok,measured}`. Usage comes from
+  `fallbacks[]`, and `capacity{ok,measured}`. Usage comes cache-first from
   `usage-axi --json --full` (or `--usage-json <path>`). `--json` for JSON,
   `--flags` for `--harness X --model Y --effort Z` passed straight to `fm-spawn`.
+- `route chain` walks the policy `modelFallback`/`fallbackLanes` step-down and
+  prints `action=harness-step|lane-move|exhausted`, the next `to_model`/
+  `to_harness`, and the chain. This is the surface `fm-model-fallback.sh` reads.
+- `select` is the fork-compatibility surface: it accepts firstmate's
+  `fm-dispatch-select.mjs` input (a profile, a `{use:[...]}` rule, or a profile
+  array) and emits the one compact launch profile, with the frozen diagnostics on
+  stderr. It keeps spendPriority rotation because it supplies no chain ranks.
 - `explain` shows each candidate (with its 1-based chain rank) and why it was
   accepted or rejected, reusing the firstmate selector's frozen rejection strings.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
   state under `~/.local/state/llm-router-axi`.
+- `capacity [check]` reports the machine gauges and policy verdict; `check` exits
+  `1` when the policy would refuse.
+
+**Chain rank beats raw headroom.** The lane's declared candidate order is the
+primary rank (1-based). The lowest-ranked *eligible* candidate wins, so an
+OpenCode Go model beats a subscription with more headroom; a candidate is skipped
+only for reserve, cooldown, stale telemetry, or machine capacity. `spendPriority`
+(and then least-recent use) breaks a tie only among candidates sharing a chain
+rank.
 
 Every command prints TOON by default; `--json` is the escape hatch. Exit codes:
 `0` success, `1` error, `2` usage error. Unknown flags are refused by name.
+
+## Usage telemetry
+
+Telemetry comes from `usage-axi --json --full`. The read is **cache-first**: a
+fresh cached document (under `~/.local/state/llm-router-axi`) is reused so a
+route does not re-pay the slow OpenUsage refresh, and a stale cache is ignored so
+the tool is asked again. The subprocess budget is **200s**
+(`USAGE_AXI_TIMEOUT_MS`) to clear the measured 82–180s refresh. Point a route at
+a fixture with `--usage-json <path>`, or override the binary with
+`LLM_ROUTER_USAGE_AXI` and the cache path with `LLM_ROUTER_USAGE_CACHE`.
 
 ## Agent skill
 
@@ -92,7 +126,7 @@ npm install
 npm run build          # tsc + copy the runtime policy seed
 npm run typecheck
 npm run lint
-npm test               # vitest: policy validator + CLI contract
+npm test               # vitest: policy validator + CLI contract + selector parity
 npm run build:skill -- --check
 npm run build:policy-schema -- --check
 ```
