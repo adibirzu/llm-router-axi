@@ -22,10 +22,12 @@ description: >
 
 ${DESCRIPTION}
 
-Status: **P2b implementation.** \`route\`, \`select\`, \`explain\`, \`capacity\`, and
-\`record\` are live. Selection, ranking, fallback, and the machine capacity
-verdict reproduce the firstmate \`fm-dispatch-select.mjs\` selector on its 14
-fixtures; the doctrine itself stays in the policy file, never in code.
+Status: **P2 implementation.** \`route\`, \`select\`, \`explain\`, \`capacity\`, and
+\`record\` are live. Eligibility and diagnostics reproduce the firstmate
+\`fm-dispatch-select.mjs\` selector on its 14 fixtures. \`route\` ranks by the
+lane's declared chain order (headroom/spendPriority only break same-rank ties);
+\`select\` keeps the fork's spendPriority rotation. The doctrine itself stays in
+the policy file, never in code.
 
 Run it without a global install:
 
@@ -74,6 +76,7 @@ npx -y ${BIN} record --provider cursor --outcome rate_limit --task t-42
 \`route\` output: \`harness, model, effort, provider, pool, reason,
 fallbacks[], capacity{ok,measured}\`. \`--json\` emits the same decision as JSON;
 \`--flags\` prints exactly \`--harness X --model Y --effort Z\` for fm-spawn.
+\`explain\` lists each candidate with its 1-based chain \`rank\`.
 
 \`select\` accepts firstmate's rule/profile-array input shape
 (\`harness/provider/model/effort/quotaWindow\`, a \`{use:[...]}\` rule, or an

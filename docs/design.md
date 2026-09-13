@@ -6,11 +6,13 @@ to delete the fork's dispatch code: `select` (arbitrary-profile selection), the
 `route chain` step-down walk, and the `capacity` machine gauges. `route`,
 `select`, `explain`, and `record` choose a harness/model/effort from the policy
 plus telemetry, print the decision, and persist cooldown and least-recent-use
-state. Selection, ranking, and fallback reproduce the firstmate
-`fm-dispatch-select.mjs` selector on its 14 fixtures
-(`test/parity/selector-parity.test.ts` runs the pinned selector side by side,
-`test/select.test.ts` runs it through the `select` CLI); the frozen rejection
-strings below are the parity contract. Telemetry comes from
+state. Eligibility, the frozen rejection strings, and `select`'s spendPriority
+rotation reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14
+fixtures (`test/parity/selector-parity.test.ts` runs the pinned selector side by
+side, `test/select.test.ts` runs it through the `select` CLI). `route` layers the
+P2c rule on top: the lane's declared chain order is the primary rank, and
+headroom/spendPriority only break ties among candidates sharing a chain rank.
+Telemetry comes from
 `usage-axi --json --full` (or `--usage-json`), reusing a fresh cached document so
 a route does not re-pay the slow OpenUsage refresh.
 
@@ -186,6 +188,14 @@ decision:
   (an unset axis is omitted; nothing else is printed).
 - `reason` and every fallback reuse the selector's diagnostic vocabulary (§5).
 
+**Chain rank** is the lane's declared candidate order (the expanded
+`candidates` chain, 1-based). The lowest-ranked *eligible* candidate wins, so
+OpenCode Go's first model beats a subscription with more raw headroom; a
+candidate is skipped only for reserve, cooldown, stale telemetry, or machine
+capacity. Known `spendPriority` (and then least-recent use) breaks a tie only
+among candidates that share a chain rank. `select` does not supply ranks, so it
+keeps the fork's spendPriority ranking.
+
 **Provider identity** is resolved here, not by the caller. `claude`, `codex`,
 `grok`, `cursor`, and `agy` map to the same-named usage-axi provider; `opencode`
 maps to provider `opencode` with pool `opencode-go` or `opencode` chosen from
@@ -212,9 +222,10 @@ that cannot be measured is reported but never refuses on its own.
 ### 3.3 `explain`
 
 Same descriptor flags as `route` (and deliberately **not** `--flags`). Output is
-a `candidates[]` table — `harness, provider, pool, model, decision
-(eligible|refused), reason` — plus the `selected` candidate and `capacity`
-verdict, so an operator can see why each candidate was accepted or dropped.
+a `candidates[]` table — `rank` (the 1-based chain position each candidate was
+considered at), `harness, provider, pool, model, decision (eligible|refused),
+reason` — plus the `selected` candidate and `capacity` verdict, so an operator
+can see why each candidate was accepted or dropped.
 Rejection reasons are the frozen selector strings, not new prose.
 
 ### 3.4 `record`
@@ -282,9 +293,11 @@ implement it; `src/usage.ts` owns provider identity and pool pricing, and
    quota window present and usable, and headroom above `reservePercent`.
    Provider-wide headroom is the minimum across usable windows; a declared
    `pool` prices that pool instead.
-4. **Ranking.** Known `spendPriority` first (higher scalar wins, scaled by
-   `spendPriority.weight`), ties broken by `tieBreaker`, preserving the
-   strongest reasoning class the lane needs.
+4. **Ranking.** The lane's declared chain order is the rank: the lowest-ranked
+   eligible candidate wins. Among candidates that share a chain rank, a known
+   `spendPriority` (higher scalar wins, scaled by `spendPriority.weight`) is the
+   tie-breaker, then least-recent use. `select` (no chain) keeps the fork's
+   spendPriority-first ranking.
 5. **Fallbacks.** Emit the next `maxFallbacks` eligible candidates in lane
    order.
 6. **Capacity verdict.** Fold in `usage-axi machine{}`: refuse when the fleet is
@@ -296,9 +309,12 @@ implement it; `src/usage.ts` owns provider identity and pool pricing, and
 
 ## 5. Selector parity
 
-P2's router must reproduce `fm-dispatch-select.mjs` byte-for-byte on the 14 fork
-tests, so `explain` and `route` reuse its strings rather than inventing new ones.
-The frozen set (P0 §4.3) includes:
+P2's `select` surface must reproduce `fm-dispatch-select.mjs` byte-for-byte on
+the 14 fork tests, so `explain`/`route` reuse its strings rather than inventing
+new ones. The shared `src/selector.ts` engine only applies chain-rank ranking
+when the caller passes a rank array (`route` does; `select` does not), so the
+14 fixtures keep their forced-spendPriority winners. The frozen set (P0 §4.3)
+includes:
 
 - `provider telemetry not fresh`
 - `provider telemetry has no usable live window percentage`

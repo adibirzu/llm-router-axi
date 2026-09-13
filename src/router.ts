@@ -81,6 +81,7 @@ export function routeLane(params: RouteLaneParams): RouterResult {
   const profiles = routed.map((item) => item.profile);
   const report = selectProfiles({
     profiles,
+    ranks: profiles.map((_, index) => index),
     quota,
     settings: {
       reservePercent: policy.routing.reservePercent,
