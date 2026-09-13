@@ -87,8 +87,11 @@ llm-router-axi capacity check
   accepted or rejected, reusing the firstmate selector's frozen rejection strings.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
   state under `~/.local/state/llm-router-axi`.
-- `capacity [check]` reports the machine gauges and policy verdict; `check` exits
-  `1` when the policy would refuse.
+- `capacity [check] [--for <spawn|suite>]` reports the machine gauges and policy
+  verdict. Spawn admission (the default, and all `route` uses) never refuses
+  because a suite is running; `--for suite` is the suite-start gate that refuses
+  when `oneSuiteAtATime` is true and the slot is occupied. `check` and
+  `--for suite` exit `1` when the selected purpose would refuse.
 
 **Chain rank beats raw headroom.** The lane's declared candidate order is the
 primary rank (1-based). The lowest-ranked *eligible* candidate wins, so an

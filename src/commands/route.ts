@@ -21,6 +21,8 @@ const ROUTE_FLAGS: FlagSpec[] = [
 
 export const ROUTE_HELP = `usage: llm-router-axi route --kind <kind> --difficulty <level> [--surface <surface>] [flags]
 description: Choose one harness/model/effort from the policy lanes plus live usage.
+  Spawn admission never refuses because a test suite is running; gate a suite
+  start with \`llm-router-axi capacity --for suite\`.
 inputs:
   --kind <ship|scout|review|architecture|admin>
   --difficulty <easy|medium|hard>

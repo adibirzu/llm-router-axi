@@ -209,6 +209,8 @@ describe("top-level surface", () => {
 
     const capacityHelp = await run(["capacity", "--help"]);
     expect(capacityHelp.output).toContain("memory pressure");
+    expect(capacityHelp.output).toContain("--for <spawn|suite>");
+    expect(capacityHelp.output).toContain("suite");
 
     const chainHelp = await run(["route", "chain", "--help"]);
     expect(chainHelp.output).toContain("fallbackLanes");
@@ -224,5 +226,61 @@ describe("top-level surface", () => {
     writeFileSync(file, "working: context token limit reached\n");
     const benign = await run(["classify-evidence", "--file", file]);
     expect(benign.output).toContain("classification=none");
+  });
+});
+
+describe("capacity admission purpose", () => {
+  let savedMachine: string | undefined;
+
+  function machineFixture(suiteSlotFree: boolean): string {
+    const path = join(dir, `machine-${suiteSlotFree ? "free" : "occupied"}.json`);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        agents: 1,
+        loadPerCore: 0.1,
+        memoryFreePct: 60,
+        memoryPressure: "normal",
+        swapUsedPct: 5,
+        swapouts: 0,
+        suiteSlotFree,
+      }),
+    );
+    return path;
+  }
+
+  beforeEach(() => {
+    savedMachine = process.env.LLM_ROUTER_MACHINE_JSON;
+  });
+
+  afterEach(() => {
+    if (savedMachine === undefined) delete process.env.LLM_ROUTER_MACHINE_JSON;
+    else process.env.LLM_ROUTER_MACHINE_JSON = savedMachine;
+  });
+
+  it("admits a spawn while the suite slot is occupied but refuses a suite start", async () => {
+    process.env.LLM_ROUTER_MACHINE_JSON = machineFixture(false);
+
+    const report = await run(["capacity"]);
+    expect(report.exitCode).toBe(0);
+    expect(report.output).toContain("occupied");
+
+    const check = await run(["capacity", "check"]);
+    expect(check.exitCode).toBe(0);
+
+    const suite = await run(["capacity", "--for", "suite"]);
+    expect(suite.exitCode).toBe(1);
+    expect(suite.output).toContain("one-suite-at-a-time slot is occupied");
+
+    const suiteCheck = await run(["capacity", "check", "--for", "suite"]);
+    expect(suiteCheck.exitCode).toBe(1);
+  });
+
+  it("admits both purposes when the suite slot is free", async () => {
+    process.env.LLM_ROUTER_MACHINE_JSON = machineFixture(true);
+
+    expect((await run(["capacity"])).exitCode).toBe(0);
+    expect((await run(["capacity", "check"])).exitCode).toBe(0);
+    expect((await run(["capacity", "--for", "suite"])).exitCode).toBe(0);
   });
 });

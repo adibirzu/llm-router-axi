@@ -8,6 +8,15 @@ export interface CapacityVerdict {
   reasons: string[];
 }
 
+/**
+ * What the verdict is admitting. A `spawn` (agent launch) is never refused
+ * because a test suite is running: the suite slot is context, because the
+ * one-suite rule serializes suite *starts*, not agent spawns. A `suite` start
+ * gates on the slot, so `fm-test-run.sh` can call `capacity --for suite` before
+ * it takes the flock.
+ */
+export type CapacityPurpose = "spawn" | "suite";
+
 const PRESSURE_RANK: Record<"normal" | "warn" | "critical", number> = {
   normal: 0,
   warn: 1,
@@ -24,9 +33,15 @@ const PRESSURE_RANK: Record<"normal" | "warn" | "critical", number> = {
  * fragile. The binding floors (`agentCeiling`, `memoryFreeReservePercent`,
  * `maxLoadPerCore`, `oneSuiteAtATime`) still fail closed, and the new
  * `memoryPressureMax` / `maxSwapUsedPercent` gates refuse when measured.
+ * `oneSuiteAtATime` fails closed only for the `suite` purpose; a `spawn` keeps
+ * the slot visible in `measured` but never refuses on it.
  */
-export function capacityVerdict(policy: Policy, quota: QuotaRead): CapacityVerdict {
-  return evaluateGauges(policy, mergeGauges(quota));
+export function capacityVerdict(
+  policy: Policy,
+  quota: QuotaRead,
+  purpose: CapacityPurpose = "spawn",
+): CapacityVerdict {
+  return evaluateGauges(policy, mergeGauges(quota), purpose);
 }
 
 /** Merge telemetry machine fields over the local/fixture measurement. */
@@ -49,7 +64,11 @@ export function mergeGauges(
 }
 
 /** Evaluate a fixed set of gauges against the policy; pure and testable. */
-export function evaluateGauges(policy: Policy, gauges: MachineGauges): CapacityVerdict {
+export function evaluateGauges(
+  policy: Policy,
+  gauges: MachineGauges,
+  purpose: CapacityPurpose = "spawn",
+): CapacityVerdict {
   const settings = policy.capacity;
   const reasons: string[] = [];
   const memoryPressureMax = settings.memoryPressureMax ?? "warn";
@@ -86,7 +105,7 @@ export function evaluateGauges(policy: Policy, gauges: MachineGauges): CapacityV
       `swap in use ${swapUsedPct}% exceeds the ${maxSwapUsedPercent}% ceiling`,
     );
   }
-  if (settings.oneSuiteAtATime && suiteSlotFree === false) {
+  if (purpose === "suite" && settings.oneSuiteAtATime && suiteSlotFree === false) {
     reasons.push("the one-suite-at-a-time slot is occupied");
   }
 
@@ -106,6 +125,8 @@ export function evaluateGauges(policy: Policy, gauges: MachineGauges): CapacityV
       maxSwapUsedPercent,
       suiteSlotFree,
       oneSuiteAtATime: settings.oneSuiteAtATime,
+      purpose,
+      suiteSlotEnforced: purpose === "suite" && settings.oneSuiteAtATime,
     },
     reasons,
   };

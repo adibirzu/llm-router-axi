@@ -334,6 +334,38 @@ describe("route", () => {
     expect(output).toContain("10-agent ceiling");
   });
 
+  it("does not refuse a route because a test suite is running", async () => {
+    const policy = cloneDefault();
+    policy.kinds.ship.medium.candidates = [
+      { harness: "claude", provider: "claude", model: "sonnet" },
+    ];
+    writePolicy(policy);
+    const usageFile = writeJson(
+      "usage.json",
+      usage({
+        providers: [fresh("claude", 80)],
+        machine: { agents: 2, agentCeiling: 10, loadPerCore: 0.2, memoryFreePct: 80, suiteSlotFree: false },
+      }),
+    );
+
+    const { output, exitCode } = await run([
+      "route",
+      "--kind",
+      "ship",
+      "--difficulty",
+      "medium",
+      "--usage-json",
+      usageFile,
+      "--json",
+    ]);
+    expect(exitCode).toBe(0);
+    const decision = JSON.parse(output) as {
+      capacity: { ok: boolean; measured: { suiteSlotFree: boolean; purpose: string } };
+    };
+    expect(decision.capacity.ok).toBe(true);
+    expect(decision.capacity.measured).toMatchObject({ suiteSlotFree: false, purpose: "spawn" });
+  });
+
   it("fails closed when the usage fixture is unreadable", async () => {
     writePolicy(cloneDefault());
     const { output, exitCode } = await run([
