@@ -11,16 +11,16 @@ description: >
 
 Policy-driven LLM router: task descriptor plus live usage in, one harness/model/effort decision out.
 
-Status: the **policy schema and validator are live**; `route`, `explain`, and
-`record` ship the contract and refuse to guess — they exit 1 with code
-`NOT_IMPLEMENTED` until the usage-axi contract lands. Do not treat their output
-as a routing decision yet.
+Status: **P2 implementation.** `route`, `explain`, and `record` are live.
+Selection, ranking, fallback, and the machine capacity verdict reproduce the
+firstmate `fm-dispatch-select.mjs` selector on its 14 fixtures; the doctrine
+itself stays in the policy file, never in code.
 
 Run it without a global install:
 
 ```sh
 npx -y llm-router-axi policy show
-npx -y llm-router-axi policy validate
+npx -y llm-router-axi route --kind ship --difficulty medium --surface backend --flags
 ```
 
 ## Policy
@@ -45,23 +45,30 @@ reviewers are Grok/Gemini(agy)/Cursor.
 ## Commands
 
 ```sh
-npx -y llm-router-axi route --kind ship --difficulty medium --surface backend [--flags]
+npx -y llm-router-axi route --kind ship --difficulty medium --surface backend [--flags] [--json]
 npx -y llm-router-axi explain --kind review --difficulty hard --surface docs
 npx -y llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 ```
 
-`route` output (planned): `harness, model, effort, provider, pool, reason,
+`route` output: `harness, model, effort, provider, pool, reason,
 fallbacks[], capacity{ok,measured}`. `--json` emits the same decision as JSON;
-`--flags` prints `--harness X --model Y --effort Z` for fm-spawn.
+`--flags` prints exactly `--harness X --model Y --effort Z` for fm-spawn.
 
-Rejection reasons in `explain` reuse the firstmate selector strings so the
-router and `fm-dispatch-select.mjs` stay at parity.
+`route` reads usage from `usage-axi --json --full` by default; pass
+`--usage-json <path>` to route from a fixture.
+
+Rejection reasons in `explain` reuse the frozen firstmate selector strings, so
+the router and `fm-dispatch-select.mjs` stay at parity.
+
+`record --outcome rate_limit` parks the provider for the policy
+`routing.cooldownSeconds`; `record --outcome ok` clears it. Cooldown and
+least-recent-use state live under `~/.local/state/llm-router-axi`.
 
 ## Exit codes
 
 ```
 0  success (including idempotent no-ops)
-1  error (including design-only NOT_IMPLEMENTED stubs)
+1  error: no eligible candidate, capacity refused, unreadable telemetry
 2  usage error: unknown flag, invalid value, malformed policy
 ```
 

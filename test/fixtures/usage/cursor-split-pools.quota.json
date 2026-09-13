@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 5,
+  "generatedAt": "1970-01-01T00:16:40.000Z",
+  "providers": [
+    {
+      "provider": "cursor",
+      "state": {
+        "status": "fresh",
+        "stale": false
+      },
+      "windows": [
+        {
+          "id": "auto_usage",
+          "percentRemaining": 99
+        },
+        {
+          "id": "api_usage",
+          "percentRemaining": 0
+        },
+        {
+          "id": "included_usage",
+          "percentRemaining": 92
+        }
+      ],
+      "quotaSemantics": {
+        "effectiveAvailability": [
+          {
+            "scope": "all_models",
+            "status": "known",
+            "effectivePercentRemaining": 0
+          }
+        ]
+      }
+    }
+  ]
+}

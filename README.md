@@ -9,10 +9,11 @@ route --kind ship --difficulty medium --surface backend
   -> --harness opencode --model opencode-go/deepseek-v4.1-flash --effort medium
 ```
 
-> **Status: design half (P2).** The policy schema and validator are live.
-> `route`, `explain`, and `record` ship their contract and exit `1` with
-> `NOT_IMPLEMENTED`; they never guess. Routing lands after the `usage-axi`
-> contract (P1) is merged. See [docs/design.md](docs/design.md).
+> **Status: implementation (P2).** The policy schema and validator are live, and
+> `route`, `explain`, and `record` are implemented. Selection, ranking, and
+> fallback reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14
+> fixtures; usage comes from `usage-axi --json --full`. See
+> [docs/design.md](docs/design.md).
 
 ## Why
 
@@ -62,10 +63,11 @@ llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 ```
 
 - `route` picks harness/model/effort/provider/pool with a `reason`, ordered
-  `fallbacks[]`, and `capacity{ok,measured}`. `--json` for JSON, `--flags` for
-  `--harness X --model Y --effort Z` passed straight to `fm-spawn`.
+  `fallbacks[]`, and `capacity{ok,measured}`. Usage comes from
+  `usage-axi --json --full` (or `--usage-json <path>`). `--json` for JSON,
+  `--flags` for `--harness X --model Y --effort Z` passed straight to `fm-spawn`.
 - `explain` shows each candidate and why it was accepted or rejected, reusing the
-  firstmate selector's rejection strings.
+  firstmate selector's frozen rejection strings.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
   state under `~/.local/state/llm-router-axi`.
 

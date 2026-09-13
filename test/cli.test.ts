@@ -9,8 +9,10 @@ import { main } from "../src/cli.js";
 let dir: string;
 let savedExitCode: number | undefined;
 let savedConfigHome: string | undefined;
+let savedStateHome: string | undefined;
 
 async function run(argv: string[]): Promise<{ output: string; exitCode: number }> {
+  process.exitCode = 0;
   let output = "";
   await main({
     argv,
@@ -27,9 +29,12 @@ async function run(argv: string[]): Promise<{ output: string; exitCode: number }
 beforeEach(() => {
   savedExitCode = process.exitCode;
   savedConfigHome = process.env.XDG_CONFIG_HOME;
+  savedStateHome = process.env.XDG_STATE_HOME;
   process.exitCode = 0;
   dir = mkdtempSync(join(tmpdir(), "llm-router-axi-test-"));
   process.env.XDG_CONFIG_HOME = dir;
+  process.env.XDG_STATE_HOME = join(dir, "state");
+  process.env.LLM_ROUTER_USAGE_AXI = join(dir, "missing-usage-axi");
 });
 
 afterEach(() => {
@@ -39,6 +44,12 @@ afterEach(() => {
   } else {
     process.env.XDG_CONFIG_HOME = savedConfigHome;
   }
+  if (savedStateHome === undefined) {
+    delete process.env.XDG_STATE_HOME;
+  } else {
+    process.env.XDG_STATE_HOME = savedStateHome;
+  }
+  delete process.env.LLM_ROUTER_USAGE_AXI;
   rmSync(dir, { recursive: true, force: true });
 });
 
@@ -102,7 +113,13 @@ describe("route/explain/record contract stubs", () => {
     expect(output).toContain("invalid value for --kind");
   });
 
-  it("refuses to choose a harness for a valid route call", async () => {
+  it("requires --kind and --difficulty on route", async () => {
+    const missing = await run(["route", "--kind", "ship"]);
+    expect(missing.exitCode).toBe(2);
+    expect(missing.output).toContain("--difficulty");
+  });
+
+  it("refuses a usable route call when no usage telemetry is available", async () => {
     const { output, exitCode } = await run([
       "route",
       "--kind",
@@ -113,15 +130,10 @@ describe("route/explain/record contract stubs", () => {
       "backend",
     ]);
     expect(exitCode).toBe(1);
-    expect(output).toContain("NOT_IMPLEMENTED");
-    expect(output).not.toContain("harness:");
+    expect(output).toContain("NO_ELIGIBLE_CANDIDATE");
   });
 
   it("accepts --flags for route but not for explain", async () => {
-    const route = await run(["route", "--kind", "ship", "--flags"]);
-    expect(route.exitCode).toBe(1);
-    expect(route.output).toContain("NOT_IMPLEMENTED");
-
     const explain = await run(["explain", "--flags"]);
     expect(explain.exitCode).toBe(2);
     expect(explain.output).toContain("unknown flag --flags");
@@ -134,7 +146,7 @@ describe("route/explain/record contract stubs", () => {
     expect(output).toContain("--task");
   });
 
-  it("refuses to persist cooldown state for a valid record call", async () => {
+  it("persists a cooldown receipt for a valid record call", async () => {
     const { output, exitCode } = await run([
       "record",
       "--provider",
@@ -144,8 +156,9 @@ describe("route/explain/record contract stubs", () => {
       "--task",
       "t-42",
     ]);
-    expect(exitCode).toBe(1);
-    expect(output).toContain("NOT_IMPLEMENTED");
+    expect(exitCode).toBe(0);
+    expect(output).toContain("cooldownUntil");
+    expect(output).toContain("t-42");
   });
 
   it("prints the route contract on --help without erroring", async () => {

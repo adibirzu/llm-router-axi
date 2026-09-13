@@ -184,7 +184,16 @@ export const POLICY_SCHEMA = {
   definitions: {
     effort: { enum: ["low", "medium", "high"] },
     harness: {
-      enum: ["claude", "codex", "grok", "cursor", "agy", "opencode"],
+      enum: [
+        "claude",
+        "codex",
+        "grok",
+        "cursor",
+        "agy",
+        "opencode",
+        "copilot",
+        "cline",
+      ],
     },
     candidate: {
       type: "object",
