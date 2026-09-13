@@ -14,7 +14,7 @@ import {
 } from "./selector.js";
 import { candidatePoolName, candidateToProfile } from "./usage.js";
 
-export interface DecisionCandidate {
+interface DecisionCandidate {
   harness: string;
   model?: string;
   effort?: string;
@@ -22,7 +22,7 @@ export interface DecisionCandidate {
   pool?: string;
 }
 
-export interface Decision {
+interface Decision {
   harness: string;
   model?: string;
   effort?: string;
@@ -37,7 +37,7 @@ export interface Decision {
   };
 }
 
-export interface RoutedCandidate {
+interface RoutedCandidate {
   candidate: Candidate;
   profile: EngineProfile;
 }
@@ -45,13 +45,12 @@ export interface RoutedCandidate {
 export interface RouterResult {
   report: SelectionReport;
   capacity: CapacityVerdict;
-  profiles: EngineProfile[];
   routes: RoutedCandidate[];
   evaluations: CandidateEvaluation[];
   decision?: Decision;
 }
 
-export interface RouteLaneParams {
+interface RouteLaneParams {
   policy: Policy;
   kind: Kind;
   difficulty: Difficulty;
@@ -97,7 +96,6 @@ export function routeLane(params: RouteLaneParams): RouterResult {
   const result: RouterResult = {
     report,
     capacity,
-    profiles,
     routes: routed,
     evaluations: report.evaluations,
   };
