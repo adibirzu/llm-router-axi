@@ -26,8 +26,6 @@ const KNOWN_FLAGS = new Map<string, "value" | "boolean">([
   ["--cooldown-seconds", "value"],
   ["--home", "value"],
   ["--json", "boolean"],
-  ["--help", "boolean"],
-  ["-h", "boolean"],
 ]);
 
 export const SELECT_HELP = `usage: llm-router-axi select [--quota-json <file>] [--now <epoch>] [<json>]

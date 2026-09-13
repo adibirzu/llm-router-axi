@@ -80,6 +80,10 @@ function signalRows(
   const settings = policy.capacity;
   const status = (reasonNeedle: string): string =>
     verdict.reasons.some((reason) => reason.includes(reasonNeedle)) ? "OVER" : "ok";
+  const slotMeasurement = (): string => {
+    if (gauges.suiteSlotFree === null) return "unknown";
+    return gauges.suiteSlotFree ? "free" : "occupied";
+  };
   return [
     {
       signal: "memory free",
@@ -119,7 +123,7 @@ function signalRows(
     },
     {
       signal: "suite slot",
-      measured: gauges.suiteSlotFree === null ? "unknown" : gauges.suiteSlotFree ? "free" : "occupied",
+      measured: slotMeasurement(),
       wanted: settings.oneSuiteAtATime ? "free" : "not checked",
       verdict: settings.oneSuiteAtATime ? status("one-suite") : "context",
     },
