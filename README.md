@@ -10,9 +10,11 @@ route --kind ship --difficulty medium --surface backend
 ```
 
 > **Status: implementation (P2).** The policy schema and validator are live, and
-> `route`, `explain`, and `record` are implemented. Selection, ranking, and
-> fallback reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14
-> fixtures; usage comes from `usage-axi --json --full`. See
+> `route`, `explain`, and `record` are implemented. Eligibility and diagnostics
+> reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14 fixtures;
+> `route` ranks by the lane's declared chain order (spendPriority/headroom only
+> break same-rank ties), while `select` keeps the fork's spendPriority rotation.
+> Usage comes from `usage-axi --json --full`. See
 > [docs/design.md](docs/design.md).
 
 ## Why
@@ -66,8 +68,8 @@ llm-router-axi record --provider cursor --outcome rate_limit --task t-42
   `fallbacks[]`, and `capacity{ok,measured}`. Usage comes from
   `usage-axi --json --full` (or `--usage-json <path>`). `--json` for JSON,
   `--flags` for `--harness X --model Y --effort Z` passed straight to `fm-spawn`.
-- `explain` shows each candidate and why it was accepted or rejected, reusing the
-  firstmate selector's frozen rejection strings.
+- `explain` shows each candidate (with its 1-based chain rank) and why it was
+  accepted or rejected, reusing the firstmate selector's frozen rejection strings.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
   state under `~/.local/state/llm-router-axi`.
 

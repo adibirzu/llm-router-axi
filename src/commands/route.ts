@@ -155,10 +155,11 @@ function renderCapacityRefusal(result: RouterResult): string {
 /** Shared candidate table for `explain` and route refusals. */
 export function candidateRows(result: RouterResult): Array<Record<string, unknown>> {
   const byProfile = new Map(result.evaluations.map((evaluation) => [evaluation.profile, evaluation]));
-  return result.routes.map((route) => {
+  return result.routes.map((route, index) => {
     const evaluation = byProfile.get(route.profile);
     const pool = route.candidate.pool ?? route.profile.poolLabel ?? null;
     return {
+      rank: index + 1,
       harness: route.profile.harness,
       provider: route.profile.provider,
       pool: pool ?? "provider-wide",
