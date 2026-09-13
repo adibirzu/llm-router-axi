@@ -1,3 +1,5 @@
+import { AxiError } from "axi-sdk-js";
+
 import { parseArgs, requireEnum, requireInteger, type FlagSpec } from "../args.js";
 import {
   DECISION_FIELDS,
@@ -7,16 +9,17 @@ import {
   KIND_VALUES,
   SURFACE_VALUES,
 } from "./descriptor.js";
-import { notImplemented } from "./not-implemented.js";
+import { evaluateDescriptor } from "./evaluate.js";
+import { helpBlock, toon } from "../render.js";
+import type { RouterResult } from "../router.js";
 
 const ROUTE_FLAGS: FlagSpec[] = [
   ...DESCRIPTOR_FLAGS,
   { name: "--flags", description: `Print ${FM_SPAWN_FLAGS} for fm-spawn` },
 ];
 
-export const ROUTE_HELP = `usage: llm-router-axi route --kind <kind> --difficulty <level> --surface <surface> [flags]
+export const ROUTE_HELP = `usage: llm-router-axi route --kind <kind> --difficulty <level> [--surface <surface>] [flags]
 description: Choose one harness/model/effort from the policy lanes plus live usage.
-  NOT IMPLEMENTED YET - this is the P2 design contract; it emits no decision.
 inputs:
   --kind <ship|scout|review|architecture|admin>
   --difficulty <easy|medium|hard>
@@ -25,10 +28,11 @@ inputs:
   --needs <a,b,c>              optional capability needs (vision, long-context, tools)
   --project <name>             optional project scope
   --usage-json <path>          usage telemetry fixture instead of usage-axi
-outputs (planned):
+  --now <epoch>                fix the current epoch second (test seam)
+  --json                       emit the same decision as JSON
+  --flags                      print exactly ${FM_SPAWN_FLAGS}
+outputs:
   TOON decision: ${DECISION_FIELDS.join(", ")}
-  --json   the same decision as JSON
-  --flags  fm-spawn flags: ${FM_SPAWN_FLAGS}
 flags[${ROUTE_FLAGS.length + 1}]:
 ${ROUTE_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}`).join(", ")}, --help
 examples:
@@ -46,37 +50,114 @@ export async function routeCommand(args: string[]): Promise<string> {
     "--difficulty",
     DIFFICULTY_VALUES,
   );
-  const surface = requireEnum(values.get("--surface"), "--surface", SURFACE_VALUES);
-  const size = requireInteger(values.get("--size"), "--size");
-  const needs = parseCsv(values.get("--needs"));
+  requireEnum(values.get("--surface"), "--surface", SURFACE_VALUES);
+  const now = requireInteger(values.get("--now"), "--now");
 
-  return notImplemented(
-    "route",
-    {
-      kind: kind ?? null,
-      difficulty: difficulty ?? null,
-      surface: surface ?? null,
-      size: size ?? null,
-      needs,
-      project: values.get("--project") ?? null,
-      usageJson: values.get("--usage-json") ?? null,
-      json: booleans.has("--json"),
-      flags: booleans.has("--flags"),
-    },
-    [
-      "Run `llm-router-axi route --help` for the full contract",
-      "Run `llm-router-axi policy show` to inspect the lanes this will draw from",
-      "Track the usage-axi contract (P1); route selection lands with it",
-    ],
+  const missing = [
+    kind === undefined ? "--kind" : undefined,
+    difficulty === undefined ? "--difficulty" : undefined,
+  ].filter((value): value is string => value !== undefined);
+  if (missing.length > 0) {
+    throw new AxiError(
+      `route is missing required flag${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`,
+      "VALIDATION_ERROR",
+      ["Usage: llm-router-axi route --kind <kind> --difficulty <level>"],
+    );
+  }
+
+  const usageJson = values.get("--usage-json");
+  const evaluation = evaluateDescriptor({
+    kind: kind as (typeof KIND_VALUES)[number],
+    difficulty: difficulty as (typeof DIFFICULTY_VALUES)[number],
+    ...(usageJson ? { usageJson } : {}),
+    ...(now !== undefined ? { now } : {}),
+  });
+  const { result } = evaluation;
+
+  if (!result.report.ok || !result.decision) {
+    return renderRefusal(result);
+  }
+
+  if (!result.capacity.ok) {
+    return renderCapacityRefusal(result);
+  }
+
+  if (booleans.has("--flags")) {
+    return spawnFlags(result);
+  }
+  if (booleans.has("--json")) {
+    return JSON.stringify(result.decision, null, 2);
+  }
+  return toon(
+    { decision: result.decision },
+    helpBlock([
+      `Run \`llm-router-axi route --kind ${kind} --difficulty ${difficulty} --flags\` for fm-spawn flags`,
+      "Run `llm-router-axi explain ...` to see why each candidate was accepted or dropped",
+    ]),
   );
 }
 
-export function parseCsv(value: string | undefined): string[] {
-  if (value === undefined) {
-    return [];
+/**
+ * `--flags` prints exactly the fm-spawn flags, omitting an unset axis and
+ * nothing else.
+ */
+function spawnFlags(result: RouterResult): string {
+  const decision = result.decision;
+  if (!decision) {
+    return "";
   }
-  return value
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const parts = [`--harness ${decision.harness}`];
+  if (decision.model) parts.push(`--model ${decision.model}`);
+  if (decision.effort) parts.push(`--effort ${decision.effort}`);
+  return parts.join(" ");
+}
+
+function renderRefusal(result: RouterResult): string {
+  process.exitCode = 1;
+  return toon(
+    {
+      error: "no subscription candidate has current dispatch capacity evidence",
+      code: "NO_ELIGIBLE_CANDIDATE",
+      reason: result.report.reason ?? "no eligible candidate",
+    },
+    { candidates: candidateRows(result) },
+    { capacity: result.capacity },
+    helpBlock([
+      "Run `llm-router-axi explain ...` for the per-candidate reasons",
+      "Run `llm-router-axi policy show --full` to inspect the candidate chain",
+    ]),
+  );
+}
+
+function renderCapacityRefusal(result: RouterResult): string {
+  process.exitCode = 1;
+  return toon(
+    {
+      error: "route refused by machine capacity",
+      code: "CAPACITY_REFUSED",
+      reasons: result.capacity.reasons,
+    },
+    { capacity: result.capacity },
+    helpBlock([
+      "Wait for the fleet to drain, then route again",
+      "Run `usage-axi machine` for the live measurement",
+    ]),
+  );
+}
+
+/** Shared candidate table for `explain` and route refusals. */
+export function candidateRows(result: RouterResult): Array<Record<string, unknown>> {
+  const byProfile = new Map(result.evaluations.map((evaluation) => [evaluation.profile, evaluation]));
+  return result.routes.map((route) => {
+    const evaluation = byProfile.get(route.profile);
+    const pool = route.candidate.pool ?? route.profile.poolLabel ?? null;
+    return {
+      harness: route.profile.harness,
+      provider: route.profile.provider,
+      pool: pool ?? "provider-wide",
+      model: route.profile.model ?? "harness-default",
+      decision: evaluation?.eligible ? "eligible" : "refused",
+      reason: evaluation?.reason ?? "not evaluated",
+    };
+  });
 }

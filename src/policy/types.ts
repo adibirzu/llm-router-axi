@@ -6,7 +6,9 @@ export type Harness =
   | "grok"
   | "cursor"
   | "agy"
-  | "opencode";
+  | "opencode"
+  | "copilot"
+  | "cline";
 
 export type Kind = "ship" | "scout" | "review" | "architecture" | "admin";
 

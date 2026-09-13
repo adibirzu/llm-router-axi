@@ -51,6 +51,11 @@ export const DESCRIPTOR_FLAGS: FlagSpec[] = [
     value: "path",
     description: "Read usage telemetry from this file instead of usage-axi",
   },
+  {
+    name: "--now",
+    value: "epoch",
+    description: "Fixed epoch second (test seam; defaults to now)",
+  },
   { name: "--json", description: "Emit JSON instead of TOON" },
 ];
 

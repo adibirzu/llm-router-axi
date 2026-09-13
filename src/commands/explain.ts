@@ -1,3 +1,5 @@
+import { AxiError } from "axi-sdk-js";
+
 import { parseArgs, requireEnum, requireInteger } from "../args.js";
 import {
   DESCRIPTOR_FLAGS,
@@ -5,12 +7,12 @@ import {
   KIND_VALUES,
   SURFACE_VALUES,
 } from "./descriptor.js";
-import { notImplemented } from "./not-implemented.js";
-import { parseCsv } from "./route.js";
+import { evaluateDescriptor } from "./evaluate.js";
+import { candidateRows } from "./route.js";
+import { helpBlock, toon } from "../render.js";
 
-export const EXPLAIN_HELP = `usage: llm-router-axi explain --kind <kind> --difficulty <level> --surface <surface> [flags]
+export const EXPLAIN_HELP = `usage: llm-router-axi explain --kind <kind> --difficulty <level> [--surface <surface>] [flags]
 description: Show why each policy candidate was accepted or rejected.
-  NOT IMPLEMENTED YET - this is the P2 design contract; it emits no ranking.
 inputs:
   --kind <ship|scout|review|architecture|admin>
   --difficulty <easy|medium|hard>
@@ -19,13 +21,15 @@ inputs:
   --needs <a,b,c>          optional capability needs
   --project <name>         optional project scope
   --usage-json <path>      usage telemetry fixture instead of usage-axi
-outputs (planned):
-  TOON candidates[]: harness, provider, pool, decision (eligible|refused), reason
-  rejection reasons reuse the selector strings quoted in docs/design.md, e.g.
+  --now <epoch>            fix the current epoch second (test seam)
+  --json                   emit the same table as JSON
+outputs:
+  TOON candidates[]: harness, provider, pool, model, decision (eligible|refused), reason
+  rejection reasons reuse the frozen selector strings, e.g.
     "provider telemetry not fresh", "quota headroom N% is at or below R% reserve",
     "declared quota window <id> is absent from provider telemetry"
-flags[8]:
-  ${DESCRIPTOR_FLAGS.map((flag) => flag.name).join(", ")}, --help
+flags[${DESCRIPTOR_FLAGS.length + 1}]:
+${DESCRIPTOR_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}`).join(", ")}, --help
 examples:
   llm-router-axi explain --kind review --difficulty hard --surface docs
   llm-router-axi explain --kind ship --difficulty medium --surface backend --usage-json usage.json
@@ -40,25 +44,57 @@ export async function explainCommand(args: string[]): Promise<string> {
     "--difficulty",
     DIFFICULTY_VALUES,
   );
-  const surface = requireEnum(values.get("--surface"), "--surface", SURFACE_VALUES);
-  const size = requireInteger(values.get("--size"), "--size");
+  requireEnum(values.get("--surface"), "--surface", SURFACE_VALUES);
+  const now = requireInteger(values.get("--now"), "--now");
 
-  return notImplemented(
-    "explain",
-    {
-      kind: kind ?? null,
-      difficulty: difficulty ?? null,
-      surface: surface ?? null,
-      size: size ?? null,
-      needs: parseCsv(values.get("--needs")),
-      project: values.get("--project") ?? null,
-      usageJson: values.get("--usage-json") ?? null,
-      json: booleans.has("--json"),
+  const missing = [
+    kind === undefined ? "--kind" : undefined,
+    difficulty === undefined ? "--difficulty" : undefined,
+  ].filter((value): value is string => value !== undefined);
+  if (missing.length > 0) {
+    throw new AxiError(
+      `explain is missing required flag${missing.length > 1 ? "s" : ""}: ${missing.join(", ")}`,
+      "VALIDATION_ERROR",
+      ["Usage: llm-router-axi explain --kind <kind> --difficulty <level>"],
+    );
+  }
+
+  const usageJson = values.get("--usage-json");
+  const evaluation = evaluateDescriptor({
+    kind: kind as (typeof KIND_VALUES)[number],
+    difficulty: difficulty as (typeof DIFFICULTY_VALUES)[number],
+    ...(usageJson ? { usageJson } : {}),
+    ...(now !== undefined ? { now } : {}),
+  });
+  const { result } = evaluation;
+
+  const selected = result.decision
+    ? {
+        harness: result.decision.harness,
+        model: result.decision.model ?? "harness-default",
+        effort: result.decision.effort ?? null,
+        provider: result.decision.provider,
+        pool: result.decision.pool ?? null,
+      }
+    : null;
+
+  const payload = {
+    descriptor: {
+      kind,
+      difficulty,
+      now: evaluation.now,
     },
-    [
-      "Run `llm-router-axi explain --help` for the full contract",
-      "Run `llm-router-axi policy show` to inspect the candidate lanes",
-      "Rejection strings are frozen in docs/design.md for selector parity",
-    ],
-  );
+    selected,
+    reason: result.decision?.reason ?? result.report.reason ?? null,
+    capacity: result.capacity,
+    candidates: candidateRows(result),
+  };
+
+  if (booleans.has("--json")) {
+    return JSON.stringify(payload, null, 2);
+  }
+  return toon(payload, helpBlock([
+    "Run `llm-router-axi route ... --flags` to dispatch the chosen candidate",
+    "Rejection reasons are the frozen firstmate selector strings (docs/design.md §5)",
+  ]));
 }

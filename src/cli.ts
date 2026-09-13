@@ -20,7 +20,7 @@ flags[2]:
   --help, -v/--version
 examples:
   llm-router-axi policy show
-  llm-router-axi route --kind ship --difficulty medium --surface backend
+  llm-router-axi route --kind ship --difficulty medium --surface backend --flags
   llm-router-axi explain --kind review --difficulty hard --surface docs
   llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 `;
@@ -108,7 +108,7 @@ function homeView(): string {
       read.source === "file"
         ? "Run `llm-router-axi policy show --full` for every lane"
         : "Run `llm-router-axi policy init` to write the default policy to disk",
-      "Run `llm-router-axi route --kind ship --difficulty medium --surface backend` to route a task (P2)",
+      "Run `llm-router-axi route --kind ship --difficulty medium --surface backend` to route a task",
       "Run `llm-router-axi policy validate` to check the active policy",
     ]),
   );

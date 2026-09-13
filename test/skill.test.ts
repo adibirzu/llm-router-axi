@@ -13,10 +13,11 @@ describe("installable skill", () => {
     expect(committed).toBe(createSkillMarkdown());
   });
 
-  it("documents the config path and the design-only status", () => {
+  it("documents the config path and the live command surface", () => {
     const skill = createSkillMarkdown();
     expect(skill).toContain("~/.config/llm-router-axi/policy.json");
+    expect(skill).toContain("~/.local/state/llm-router-axi");
     expect(skill).toContain("npx -y llm-router-axi");
-    expect(skill).toContain("NOT_IMPLEMENTED");
+    expect(skill).toContain("--flags");
   });
 });
