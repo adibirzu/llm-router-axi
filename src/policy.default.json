@@ -21,8 +21,8 @@
     },
     "agy": {
       "default": "gemini",
-      "gemini": ["geminiSession", "geminiWeekly"],
-      "nonGemini": ["nonGeminiSession", "nonGeminiWeekly"]
+      "gemini": ["gemini_5h", "gemini_weekly"],
+      "nonGemini": ["claude_gpt_5h", "claude_gpt_weekly"]
     },
     "opencode": {
       "default": "opencode-go",

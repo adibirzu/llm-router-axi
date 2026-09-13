@@ -77,8 +77,8 @@ describe("default policy", () => {
     const policy = readDefaultPolicy();
     expect(policy.pools.cursor.auto).toBe("auto_usage");
     expect(policy.pools.cursor.api).toBe("api_usage");
-    expect(policy.pools.agy.gemini).toContain("geminiSession");
-    expect(policy.pools.agy.nonGemini).toContain("nonGeminiSession");
+    expect(policy.pools.agy.gemini).toContain("gemini_5h");
+    expect(policy.pools.agy.nonGemini).toContain("claude_gpt_5h");
     expect(policy.pools.opencode.go).toBe("opencode-go");
     expect(policy.pools.opencode.free).toBe("opencode");
   });

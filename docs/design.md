@@ -45,7 +45,7 @@ Top-level keys (all required; unknown keys are refused):
 | `version` | Schema version, currently `1`. |
 | `routing` | `reservePercent` (20), `cooldownSeconds` (1800), `telemetryMaxAgeSeconds` (300), `maxFallbacks` (4). |
 | `capacity` | `agentCeiling` (10), `oneSuiteAtATime` (true), `memoryFreeReservePercent` (20), `maxLoadPerCore` (2). |
-| `pools` | Split-pool window ids: cursor `auto_usage`/`api_usage`, agy `geminiSession`/`nonGeminiSession` families, opencode `opencode-go`/`opencode`. |
+| `pools` | Split-pool window ids: cursor `auto_usage`/`api_usage`, agy `gemini_5h`/`gemini_weekly` vs `claude_gpt_5h`/`claude_gpt_weekly`, opencode `opencode-go`/`opencode`. |
 | `spendPriority` | `weight`, `tieBreaker` (`least-recent-use` \| `declared-order`), `preferKnown`. |
 | `candidateGroups` | Named, ordered candidate lists. |
 | `kinds` | Lanes keyed by kind, then difficulty. |
@@ -101,7 +101,7 @@ OpenUsage showed Auto at ~99%). `pools` fixes the window ids by name:
 | Provider | Default | Windows / pools |
 |---|---|---|
 | cursor | `auto_usage` | `auto_usage` vs `api_usage` |
-| agy | `gemini` | `geminiSession` + `geminiWeekly` vs `nonGeminiSession` + `nonGeminiWeekly` |
+| agy | `gemini` | `gemini_5h` + `gemini_weekly` vs `claude_gpt_5h` + `claude_gpt_weekly` |
 | opencode | `opencode-go` | `opencode-go` (paid Go) vs `opencode` (free Zen) |
 
 A candidate's `pool` names which one it draws on, so the router prices the
