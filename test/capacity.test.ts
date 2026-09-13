@@ -84,10 +84,33 @@ describe("capacity doctrine", () => {
     expect(evaluateGauges(bounded, gauges({ swapUsedPct: 40 })).ok).toBe(true);
   });
 
-  it("refuses at the worker-root agent ceiling and on an occupied suite slot", () => {
+  it("refuses at the worker-root agent ceiling", () => {
     const policy = cloneDefault();
     expect(evaluateGauges(policy, gauges({ agents: 10 })).ok).toBe(false);
-    expect(evaluateGauges(policy, gauges({ suiteSlotFree: false })).ok).toBe(false);
+  });
+
+  it("keeps the occupied suite slot as spawn context but refuses a suite start", () => {
+    const policy = cloneDefault();
+    const occupied = gauges({ suiteSlotFree: false });
+    const spawn = evaluateGauges(policy, occupied);
+    expect(spawn.ok).toBe(true);
+    expect(spawn.reasons).toHaveLength(0);
+    expect(spawn.measured).toMatchObject({ suiteSlotFree: false, purpose: "spawn" });
+
+    const suite = evaluateGauges(policy, occupied, "suite");
+    expect(suite.ok).toBe(false);
+    expect(suite.reasons.join(" ")).toContain("one-suite-at-a-time slot is occupied");
+    expect(suite.measured).toMatchObject({ purpose: "suite", suiteSlotEnforced: true });
+  });
+
+  it("admits both purposes when the suite slot is free or the rule is off", () => {
+    const policy = cloneDefault();
+    expect(evaluateGauges(policy, gauges({ suiteSlotFree: true })).ok).toBe(true);
+    expect(evaluateGauges(policy, gauges({ suiteSlotFree: true }), "suite").ok).toBe(true);
+
+    const off = cloneDefault();
+    off.capacity.oneSuiteAtATime = false;
+    expect(evaluateGauges(off, gauges({ suiteSlotFree: false }), "suite").ok).toBe(true);
   });
 
   it("lets usage-axi machine{} override the local probe", () => {
