@@ -1,0 +1,22 @@
+{
+  "source": "synthetic",
+  "platform": "darwin",
+  "capturedAt": "2026-09-15T00:00:00Z",
+  "commands": {
+    "comm": "ps -ax -o pid=,ppid=,rss=,comm=",
+    "argv": "ps -ax -o pid=,args="
+  },
+  "redaction": "synthetic argv; no prompts or credentials.",
+  "golden": {
+    "residentMb": 9,
+    "agents": 1,
+    "procs": 2
+  },
+  "forkGolden": {
+    "residentMb": 16,
+    "agents": 4,
+    "procs": 5
+  },
+  "goldenSource": "usage-axi invocation-root classifier (readFleet). forkGolden is fm_capacity_fleet_totals on the same snapshot (worker-start daemon + its child + private-worker daemon + standalone cursor-agent).",
+  "note": "Cursor Helper is unmatched. worker start, its matching child, and private-worker daemons are not task sessions. Standalone cursor-agent counts as 1."
+}

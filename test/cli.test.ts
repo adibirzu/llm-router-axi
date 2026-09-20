@@ -284,3 +284,48 @@ describe("capacity admission purpose", () => {
     expect((await run(["capacity", "--for", "suite"])).exitCode).toBe(0);
   });
 });
+
+describe("capacity worker-root audit trail", () => {
+  let savedCommFile: string | undefined;
+  let savedArgvFile: string | undefined;
+
+  beforeEach(() => {
+    savedCommFile = process.env.LLM_ROUTER_MACHINE_PS_COMM;
+    savedArgvFile = process.env.LLM_ROUTER_MACHINE_PS_ARGV;
+    // The codex-triple fixture (vendored from usage-axi) collapses a node
+    // wrapper -> codex -> codex-code-mode-host into exactly one invocation
+    // root, so `capacity` must report `agents: 1` with one auditable root.
+    process.env.LLM_ROUTER_MACHINE_PS_COMM = join(
+      process.cwd(),
+      "test/fixtures/machine/codex-triple.comm.ps",
+    );
+    process.env.LLM_ROUTER_MACHINE_PS_ARGV = join(
+      process.cwd(),
+      "test/fixtures/machine/codex-triple.argv.ps",
+    );
+  });
+
+  afterEach(() => {
+    if (savedCommFile === undefined) delete process.env.LLM_ROUTER_MACHINE_PS_COMM;
+    else process.env.LLM_ROUTER_MACHINE_PS_COMM = savedCommFile;
+    if (savedArgvFile === undefined) delete process.env.LLM_ROUTER_MACHINE_PS_ARGV;
+    else process.env.LLM_ROUTER_MACHINE_PS_ARGV = savedArgvFile;
+  });
+
+  it("lists the counted invocation root in --json", async () => {
+    const { output, exitCode } = await run(["capacity", "--json"]);
+    expect(exitCode).toBe(0);
+    const parsed = JSON.parse(output) as {
+      measured: { agents: number };
+      roots: Array<{ pid: number; comm: string; match: string; via: string }>;
+    };
+    expect(parsed.measured.agents).toBe(1);
+    expect(parsed.roots).toEqual([{ pid: 100, comm: "node", match: "codex", via: "argv" }]);
+  });
+
+  it("prints a roots[] TOON block", async () => {
+    const { output } = await run(["capacity"]);
+    expect(output).toContain("roots[1]{pid,comm,match,via}:");
+    expect(output).toContain("100,node,codex,argv");
+  });
+});

@@ -29,12 +29,14 @@ description:
   check exits 1 when the selected purpose has no headroom; a bare spawn report
   exits 0.
 gauges: free memory percent, memory pressure level, swap in use, worker-root
-        agent count, load per core, one-suite-at-a-time slot.
+        agent count, load per core, one-suite-at-a-time slot. Each counted
+        worker-root agent is listed in roots[] (pid, comm, matched adapter,
+        via) so the count is auditable.
 inputs:
   check                verify only; exit 1 when the selected purpose would refuse
   --for <spawn|suite>  admission purpose; spawn (default) ignores the suite slot
                        for refusal, suite enforces oneSuiteAtATime
-  --json               emit {ok, measured, reasons, signals[]} as JSON
+  --json               emit {ok, measured, reasons, signals[], roots[]} as JSON
 flags[${CAPACITY_FLAGS.length + 1}]:
 ${CAPACITY_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}`).join(", ")}, --help
 examples:
@@ -65,6 +67,7 @@ export async function capacityCommand(args: string[]): Promise<string> {
   const gauges = measureMachine();
   const verdict = evaluateGauges(read.policy, gauges, purpose);
   const signals = signalRows(read.policy, gauges, verdict, purpose);
+  const roots = gauges.roots ?? [];
 
   // A `suite` request is itself an admission check, so a bare `--for suite`
   // fails closed just like `check`; a bare spawn report stays a read-only view.
@@ -72,7 +75,7 @@ export async function capacityCommand(args: string[]): Promise<string> {
     process.exitCode = 1;
   }
   if (booleans.has("--json")) {
-    return JSON.stringify({ ...verdict, signals }, null, 2);
+    return JSON.stringify({ ...verdict, signals, roots }, null, 2);
   }
   return toon(
     {
@@ -85,6 +88,7 @@ export async function capacityCommand(args: string[]): Promise<string> {
       },
     },
     { signals },
+    roots.length ? { roots } : undefined,
     helpBlock([
       "Run `llm-router-axi route --kind ship --difficulty medium --surface backend --flags` to dispatch",
       "Run `llm-router-axi capacity --for suite` before starting a test suite",

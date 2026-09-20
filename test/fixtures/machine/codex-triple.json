@@ -1,0 +1,22 @@
+{
+  "source": "synthetic",
+  "platform": "darwin",
+  "capturedAt": "2026-09-15T00:00:00Z",
+  "commands": {
+    "comm": "ps -ax -o pid=,ppid=,rss=,comm=",
+    "argv": "ps -ax -o pid=,args="
+  },
+  "redaction": "synthetic argv; no prompts or credentials.",
+  "golden": {
+    "residentMb": 14,
+    "agents": 1,
+    "procs": 3
+  },
+  "forkGolden": {
+    "residentMb": 14,
+    "agents": 3,
+    "procs": 3
+  },
+  "goldenSource": "usage-axi invocation-root classifier (readFleet). forkGolden is fm_capacity_fleet_totals on the same snapshot (node argv + codex comm + codex-code-mode-host comm).",
+  "note": "Deterministic Codex triple: node wrapper (argv names codex) -> codex binary -> codex-code-mode-host counts as 1 invocation."
+}

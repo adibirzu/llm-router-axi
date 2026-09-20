@@ -60,6 +60,7 @@ export function mergeGauges(
     swapUsedPct: machine?.swapUsedPct ?? probe.swapUsedPct,
     swapouts: machine?.swapouts ?? probe.swapouts,
     suiteSlotFree: machine?.suiteSlotFree ?? probe.suiteSlotFree,
+    roots: probe.roots,
   };
 }
 
