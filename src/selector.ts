@@ -83,6 +83,10 @@ export interface MachineTelemetry {
   memoryPressure?: "normal" | "warn" | "critical" | null;
   swapUsedPct?: number | null;
   swapouts?: number | null;
+  llamaParallel?: number | null;
+  llamaSlotsTotal?: number | null;
+  llamaSlotsBusy?: number | null;
+  llamaSlotFree?: boolean | null;
 }
 
 export type QuotaRead =

@@ -11,38 +11,48 @@ const CAPACITY_FLAGS: FlagSpec[] = [
   { name: "--json", description: "Emit the gauges and verdict as JSON" },
   {
     name: "--for",
-    value: "spawn|suite",
+    value: "spawn|suite|local-llm",
     description:
-      "Admission purpose: spawn (default) never refuses on the suite slot; suite refuses when oneSuiteAtATime is true and it is occupied",
+      "Admission purpose: spawn (default) never refuses on the suite slot; suite refuses when oneSuiteAtATime is true and it is occupied; local-llm refuses when every llama.cpp parallel slot is busy",
   },
 ];
 
-export const CAPACITY_HELP = `usage: llm-router-axi capacity [check] [--for <spawn|suite>] [--json]
+export const CAPACITY_HELP = `usage: llm-router-axi capacity [check] [--for <spawn|suite|local-llm>] [--json]
 description:
   Report the machine gauges the router uses, measured from local probes (ported
   from firstmate bin/fm-capacity-lib.sh), against the policy capacity thresholds.
-  Two admission purposes share one verdict:
-    spawn (default)  gate an agent launch; the suite slot is context only.
+  Three admission purposes share one verdict:
+    spawn (default)  gate an agent launch; the suite slot and llama slots are
+                     context only.
     suite            gate a test-suite start; refuses when oneSuiteAtATime is
                      true and the slot is occupied. This is what fm-test-run.sh
                      calls before starting a suite.
+    local-llm        gate a local-Qwen agent launch on adi1; refuses when every
+                     llama.cpp --parallel slot (LLM_ROUTER_LLAMA_SLOTS_URL,
+                     default the adi1 /slots endpoint) is busy.
   check exits 1 when the selected purpose has no headroom; a bare spawn report
   exits 0.
 gauges: free memory percent, memory pressure level, swap in use, worker-root
-        agent count, load per core, one-suite-at-a-time slot. Each counted
-        worker-root agent is listed in roots[] (pid, comm, matched adapter,
-        via) so the count is auditable.
+        agent count, load per core, one-suite-at-a-time slot, llama.cpp
+        parallel slots busy/total. Each counted worker-root agent is listed
+        in roots[] (pid, comm, matched adapter, via) so the count is auditable.
 inputs:
-  check                verify only; exit 1 when the selected purpose would refuse
-  --for <spawn|suite>  admission purpose; spawn (default) ignores the suite slot
-                       for refusal, suite enforces oneSuiteAtATime
-  --json               emit {ok, measured, reasons, signals[], roots[]} as JSON
+  check                         verify only; exit 1 when the selected purpose
+                                would refuse
+  --for <spawn|suite|local-llm>  admission purpose; spawn (default) ignores
+                                the suite slot and llama slots for refusal;
+                                suite enforces oneSuiteAtATime; local-llm
+                                refuses when every llama.cpp parallel slot
+                                is busy
+  --json                        emit {ok, measured, reasons, signals[], roots[]}
+                                as JSON
 flags[${CAPACITY_FLAGS.length + 1}]:
 ${CAPACITY_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}`).join(", ")}, --help
 examples:
   llm-router-axi capacity
   llm-router-axi capacity check
   llm-router-axi capacity --for suite
+  llm-router-axi capacity --for local-llm
   llm-router-axi capacity --json
 `;
 
@@ -54,7 +64,7 @@ export async function capacityCommand(args: string[]): Promise<string> {
   const rest = verb ? args.slice(1) : args;
   const { values, booleans } = parseArgs("capacity", rest, CAPACITY_FLAGS);
   const purpose: CapacityPurpose =
-    requireEnum(values.get("--for"), "--for", ["spawn", "suite"] as const) ?? "spawn";
+    requireEnum(values.get("--for"), "--for", ["spawn", "suite", "local-llm"] as const) ?? "spawn";
 
   const read = loadEffectivePolicy();
   if (!read.ok) {
@@ -69,9 +79,10 @@ export async function capacityCommand(args: string[]): Promise<string> {
   const signals = signalRows(read.policy, gauges, verdict, purpose);
   const roots = gauges.roots ?? [];
 
-  // A `suite` request is itself an admission check, so a bare `--for suite`
-  // fails closed just like `check`; a bare spawn report stays a read-only view.
-  if ((verb === "check" || purpose === "suite") && !verdict.ok) {
+  // A `suite`/`local-llm` request is itself an admission check, so a bare
+  // `--for suite`/`--for local-llm` fails closed just like `check`; a bare
+  // spawn report stays a read-only view.
+  if ((verb === "check" || purpose === "suite" || purpose === "local-llm") && !verdict.ok) {
     process.exitCode = 1;
   }
   if (booleans.has("--json")) {
@@ -157,6 +168,15 @@ function signalRows(
           ? "free"
           : "free (context for spawn)",
       verdict: suiteEnforced ? status("one-suite") : "context",
+    },
+    {
+      signal: "llama slots",
+      measured:
+        gauges.llamaSlotsBusy === null || gauges.llamaSlotsTotal === null
+          ? "unknown"
+          : `${gauges.llamaSlotsBusy}/${gauges.llamaSlotsTotal} busy`,
+      wanted: `under ${settings.llamaParallel ?? gauges.llamaParallel ?? 2} (local-llm)`,
+      verdict: purpose === "local-llm" ? status("llama slots are full") : "context",
     },
   ];
 }

@@ -11,6 +11,9 @@ import {
 } from "../src/policy/index.js";
 
 const schemaPath = fileURLToPath(new URL("../policy.schema.json", import.meta.url));
+const livePolicyPath = fileURLToPath(
+  new URL("./fixtures/policy/live-mac-mini.policy.json", import.meta.url),
+);
 
 function cloneDefault() {
   return JSON.parse(JSON.stringify(readDefaultPolicy())) as Record<string, unknown>;
@@ -101,6 +104,19 @@ describe("default policy", () => {
         policy.candidateGroups.workers.length,
       );
     }
+  });
+});
+
+describe("live policy fixture", () => {
+  it("validates the Mac mini's effective policy.json (capacity.llamaParallel included)", () => {
+    const live = JSON.parse(readFileSync(livePolicyPath, "utf8")) as Record<string, unknown>;
+    const result = validatePolicy(live);
+    expect(result.ok, result.ok ? "" : JSON.stringify((result as { issues: unknown }).issues)).toBe(
+      true,
+    );
+    const capacity = (live.capacity as Record<string, unknown>) ?? {};
+    expect(capacity.agentCeiling).toBe(15);
+    expect(capacity.llamaParallel).toBe(2);
   });
 });
 

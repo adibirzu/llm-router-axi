@@ -113,6 +113,13 @@ export const POLICY_SCHEMA = {
           description:
             "Swap-in-use ceiling in percent; null reports swap without refusing.",
         },
+        llamaParallel: {
+          type: "integer",
+          minimum: 1,
+          maximum: 16,
+          description:
+            "Configured llama.cpp --parallel ceiling for the local qwen fleet (default 2). Enforced only for capacity --for local-llm.",
+        },
       },
     },
     pools: {
