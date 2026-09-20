@@ -13,7 +13,8 @@
     "memoryFreeReservePercent": 10,
     "maxLoadPerCore": 2,
     "memoryPressureMax": "warn",
-    "maxSwapUsedPercent": null
+    "maxSwapUsedPercent": null,
+    "llamaParallel": 2
   },
   "pools": {
     "cursor": {

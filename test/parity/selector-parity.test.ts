@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -148,7 +148,14 @@ function provider(name: string, windows: unknown[], status = "fresh"): unknown {
 function prepare(
   scenario: Scenario,
 ): { home: string; quotaFile: string; selectorState: string; engineState: string } {
-  const home = mkdtempSync(join(tmpdir(), "llm-router-parity-"));
+  // The selector fixture resolves FM_HOME through `fs.realpathSync` (never
+  // trust a symlink for a home directory); the tie-break hash is salted with
+  // that resolved home. macOS routes `os.tmpdir()` through `/var` -> `/private/var`,
+  // so an unresolved mkdtemp path here diverges from what the selector process
+  // actually hashes with, flipping which tied candidate wins on a real Mac
+  // while a symlink-free CI tmpdir never surfaces it. Resolve once, up front,
+  // so both sides hash the identical path and the parity check is hermetic.
+  const home = realpathSync(mkdtempSync(join(tmpdir(), "llm-router-parity-")));
   tempDirs.push(home);
   mkdirSync(join(home, "state"), { recursive: true });
   mkdirSync(join(home, "config"), { recursive: true });
