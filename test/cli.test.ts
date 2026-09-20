@@ -209,8 +209,9 @@ describe("top-level surface", () => {
 
     const capacityHelp = await run(["capacity", "--help"]);
     expect(capacityHelp.output).toContain("memory pressure");
-    expect(capacityHelp.output).toContain("--for <spawn|suite>");
+    expect(capacityHelp.output).toContain("--for <spawn|suite|local-llm>");
     expect(capacityHelp.output).toContain("suite");
+    expect(capacityHelp.output).toContain("local-llm");
 
     const chainHelp = await run(["route", "chain", "--help"]);
     expect(chainHelp.output).toContain("fallbackLanes");
@@ -282,6 +283,26 @@ describe("capacity admission purpose", () => {
     expect((await run(["capacity"])).exitCode).toBe(0);
     expect((await run(["capacity", "check"])).exitCode).toBe(0);
     expect((await run(["capacity", "--for", "suite"])).exitCode).toBe(0);
+  });
+
+  it("admits a spawn while every llama slot is busy but refuses --for local-llm", async () => {
+    process.env.LLM_ROUTER_MACHINE_JSON = machineFixture(true);
+    const savedBusy = process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY;
+    process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY = "2";
+    try {
+      const spawn = await run(["capacity"]);
+      expect(spawn.exitCode).toBe(0);
+
+      const localLlm = await run(["capacity", "--for", "local-llm"]);
+      expect(localLlm.exitCode).toBe(1);
+      expect(localLlm.output).toContain("llama slots are full");
+
+      process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY = "0";
+      expect((await run(["capacity", "--for", "local-llm"])).exitCode).toBe(0);
+    } finally {
+      if (savedBusy === undefined) delete process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY;
+      else process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY = savedBusy;
+    }
   });
 });
 

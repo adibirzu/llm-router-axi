@@ -70,6 +70,7 @@ llm-router-axi select --json '<profile or rule>'
 llm-router-axi explain --kind review --difficulty hard --surface docs
 llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 llm-router-axi capacity check
+llm-router-axi capacity --for local-llm
 ```
 
 - `route` picks harness/model/effort/provider/pool with a `reason`, ordered
@@ -87,11 +88,15 @@ llm-router-axi capacity check
   accepted or rejected, reusing the firstmate selector's frozen rejection strings.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
   state under `~/.local/state/llm-router-axi`.
-- `capacity [check] [--for <spawn|suite>]` reports the machine gauges and policy
-  verdict. Spawn admission (the default, and all `route` uses) never refuses
-  because a suite is running; `--for suite` is the suite-start gate that refuses
-  when `oneSuiteAtATime` is true and the slot is occupied. `check` and
-  `--for suite` exit `1` when the selected purpose would refuse.
+- `capacity [check] [--for <spawn|suite|local-llm>]` reports the machine gauges
+  (including llama.cpp parallel slots busy/total for the adi1 local-Qwen
+  fleet) and policy verdict. Spawn admission (the default, and all `route`
+  uses) never refuses because a suite is running or a llama slot is busy;
+  `--for suite` is the suite-start gate that refuses when `oneSuiteAtATime` is
+  true and the slot is occupied; `--for local-llm` is the gate a local-Qwen
+  agent launch calls, and refuses when every configured `capacity.llamaParallel`
+  slot is busy. `check`, `--for suite`, and `--for local-llm` exit `1` when the
+  selected purpose would refuse.
 
 **Chain rank beats raw headroom.** The lane's declared candidate order is the
 primary rank (1-based). The lowest-ranked *eligible* candidate wins, so an

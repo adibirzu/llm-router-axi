@@ -6,5 +6,9 @@
   "memoryPressure": "normal",
   "swapUsedPct": 5,
   "swapouts": 0,
-  "suiteSlotFree": true
+  "suiteSlotFree": true,
+  "llamaParallel": 2,
+  "llamaSlotsTotal": 2,
+  "llamaSlotsBusy": 0,
+  "llamaSlotFree": true
 }

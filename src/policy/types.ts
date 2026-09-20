@@ -61,6 +61,12 @@ export interface CapacitySettings {
    * because a long-lived dev box swaps inactive pages without being strained.
    */
   maxSwapUsedPercent?: number | null;
+  /**
+   * Configured llama.cpp --parallel ceiling for the local qwen fleet.
+   * Reported in capacity measured{}; enforced only for purpose `local-llm`.
+   * Optional for older policy files; code default is 2.
+   */
+  llamaParallel?: number;
 }
 
 /**

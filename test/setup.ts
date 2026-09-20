@@ -10,3 +10,11 @@ import { fileURLToPath } from "node:url";
 process.env.LLM_ROUTER_MACHINE_JSON = fileURLToPath(
   new URL("./fixtures/machine/healthy.json", import.meta.url),
 );
+
+/**
+ * The llama.cpp slots probe is a real curl to adi1; never let a test spawn it.
+ * "off" makes `measureMachine()` report the fixture's llama fields untouched,
+ * same doctrine as every other gauge here. A test that wants the live-probe
+ * path sets `LLM_ROUTER_LLAMA_SLOTS_URL`/`LLM_ROUTER_LLAMA_SLOTS_BUSY` itself.
+ */
+process.env.LLM_ROUTER_LLAMA_SLOTS_URL = "off";

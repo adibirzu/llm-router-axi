@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evaluateGauges, mergeGauges } from "../src/capacity.js";
 import {
   countWorkerRoots,
+  foldLlamaSlots,
+  llamaParallelCeiling,
   measureMachine,
   pressureFromLevel,
   pressureFromPsiAvg10,
@@ -32,6 +34,10 @@ function gauges(overrides: Partial<MachineGauges> = {}): MachineGauges {
     swapUsedPct: 5,
     swapouts: 0,
     suiteSlotFree: true,
+    llamaParallel: 2,
+    llamaSlotsTotal: 2,
+    llamaSlotsBusy: 0,
+    llamaSlotFree: true,
     ...overrides,
   };
 }
@@ -113,6 +119,30 @@ describe("capacity doctrine", () => {
     expect(evaluateGauges(off, gauges({ suiteSlotFree: false }), "suite").ok).toBe(true);
   });
 
+  it("refuses local-llm when every llama slot is busy and admits when one is free", () => {
+    const policy = cloneDefault();
+    const full = gauges({ llamaSlotsBusy: 2, llamaSlotsTotal: 2, llamaSlotFree: false });
+    const refused = evaluateGauges(policy, full, "local-llm");
+    expect(refused.ok).toBe(false);
+    expect(refused.reasons.join(" ")).toContain("llama slots are full");
+
+    const spawnStillOk = evaluateGauges(policy, full, "spawn");
+    expect(spawnStillOk.ok).toBe(true);
+
+    const free = gauges({ llamaSlotsBusy: 1, llamaSlotsTotal: 2, llamaSlotFree: true });
+    expect(evaluateGauges(policy, free, "local-llm").ok).toBe(true);
+  });
+
+  it("does not refuse local-llm on an unreadable llama probe", () => {
+    const policy = cloneDefault();
+    const unknown = gauges({
+      llamaSlotsBusy: null,
+      llamaSlotsTotal: null,
+      llamaSlotFree: null,
+    });
+    expect(evaluateGauges(policy, unknown, "local-llm").ok).toBe(true);
+  });
+
   it("lets usage-axi machine{} override the local probe", () => {
     const quota: QuotaRead = {
       available: true,
@@ -178,6 +208,102 @@ describe("machine probes (Linux correctness)", () => {
     expect(suiteSlotFromArgv(argv)).toBe(false);
     expect(suiteSlotFromArgv("12 node /usr/bin/serve\n")).toBe(true);
     expect(suiteSlotFromArgv(null)).toBeNull();
+  });
+});
+
+describe("llama slots gauge", () => {
+  it("folds a /slots payload into busy/total/free from is_processing", () => {
+    const idle = foldLlamaSlots(2, [{ id: 0, is_processing: false }, { id: 1, is_processing: false }]);
+    expect(idle).toEqual({ llamaSlotsTotal: 2, llamaSlotsBusy: 0, llamaSlotFree: true });
+
+    const oneBusy = foldLlamaSlots(2, [{ id: 0, is_processing: true }, { id: 1, is_processing: false }]);
+    expect(oneBusy).toEqual({ llamaSlotsTotal: 2, llamaSlotsBusy: 1, llamaSlotFree: true });
+
+    const allBusy = foldLlamaSlots(2, [{ id: 0, is_processing: true }, { id: 1, is_processing: true }]);
+    expect(allBusy).toEqual({ llamaSlotsTotal: 2, llamaSlotsBusy: 2, llamaSlotFree: false });
+  });
+
+  it("treats a malformed or empty /slots payload as unreadable, not free", () => {
+    expect(foldLlamaSlots(2, [])).toEqual({
+      llamaSlotsTotal: null,
+      llamaSlotsBusy: null,
+      llamaSlotFree: null,
+    });
+    expect(foldLlamaSlots(2, null)).toEqual({
+      llamaSlotsTotal: null,
+      llamaSlotsBusy: null,
+      llamaSlotFree: null,
+    });
+    expect(foldLlamaSlots(2, { not: "an array" })).toEqual({
+      llamaSlotsTotal: null,
+      llamaSlotsBusy: null,
+      llamaSlotFree: null,
+    });
+  });
+
+  it("defaults the --parallel ceiling to 2 and honors LLM_ROUTER_LLAMA_PARALLEL", () => {
+    const saved = process.env.LLM_ROUTER_LLAMA_PARALLEL;
+    try {
+      delete process.env.LLM_ROUTER_LLAMA_PARALLEL;
+      expect(llamaParallelCeiling()).toBe(2);
+      process.env.LLM_ROUTER_LLAMA_PARALLEL = "4";
+      expect(llamaParallelCeiling()).toBe(4);
+    } finally {
+      if (saved === undefined) delete process.env.LLM_ROUTER_LLAMA_PARALLEL;
+      else process.env.LLM_ROUTER_LLAMA_PARALLEL = saved;
+    }
+  });
+
+  describe("measureMachine probe seam", () => {
+    const savedEnv: Record<string, string | undefined> = {};
+    const KEYS = ["LLM_ROUTER_MACHINE_JSON", "LLM_ROUTER_LLAMA_SLOTS_URL", "LLM_ROUTER_LLAMA_SLOTS_BUSY", "LLM_ROUTER_LLAMA_PARALLEL"];
+
+    beforeEach(() => {
+      for (const key of KEYS) savedEnv[key] = process.env[key];
+      // Drop the suite-wide gauge fixture so these assertions see the raw probe.
+      delete process.env.LLM_ROUTER_MACHINE_JSON;
+    });
+
+    afterEach(() => {
+      for (const key of KEYS) {
+        if (savedEnv[key] === undefined) delete process.env[key];
+        else process.env[key] = savedEnv[key];
+      }
+    });
+
+    it("reports unknown, not free, when the llama server is unreachable", () => {
+      process.env.LLM_ROUTER_LLAMA_SLOTS_URL = "off";
+      const gaugesRead = measureMachine();
+      expect(gaugesRead.llamaSlotsTotal).toBeNull();
+      expect(gaugesRead.llamaSlotsBusy).toBeNull();
+      expect(gaugesRead.llamaSlotFree).toBeNull();
+      expect(gaugesRead.llamaParallel).toBe(2);
+    });
+
+    it("reads a busy count from LLM_ROUTER_LLAMA_SLOTS_BUSY without a network probe", () => {
+      process.env.LLM_ROUTER_LLAMA_PARALLEL = "2";
+      process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY = "2";
+      expect(measureMachine()).toMatchObject({
+        llamaParallel: 2,
+        llamaSlotsTotal: 2,
+        llamaSlotsBusy: 2,
+        llamaSlotFree: false,
+      });
+
+      process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY = "1";
+      expect(measureMachine()).toMatchObject({
+        llamaSlotsBusy: 1,
+        llamaSlotFree: true,
+      });
+    });
+
+    it("reports unknown when LLM_ROUTER_LLAMA_SLOTS_BUSY is explicitly unknown", () => {
+      process.env.LLM_ROUTER_LLAMA_SLOTS_BUSY = "unknown";
+      const gaugesRead = measureMachine();
+      expect(gaugesRead.llamaSlotsTotal).toBeNull();
+      expect(gaugesRead.llamaSlotsBusy).toBeNull();
+      expect(gaugesRead.llamaSlotFree).toBeNull();
+    });
   });
 });
 
