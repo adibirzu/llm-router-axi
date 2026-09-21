@@ -2,11 +2,13 @@ import { runAxiCli } from "axi-sdk-js";
 
 import { capacityCommand, CAPACITY_HELP } from "./commands/capacity.js";
 import { classifyCommand, CLASSIFY_HELP } from "./commands/classify.js";
+import { doctorCommand, DOCTOR_HELP } from "./commands/doctor.js";
 import { explainCommand, EXPLAIN_HELP } from "./commands/explain.js";
 import { policyCommand } from "./commands/policy.js";
 import { recordCommand, RECORD_HELP } from "./commands/record.js";
 import { routeCommand } from "./commands/route.js";
 import { selectCommand, SELECT_HELP } from "./commands/select.js";
+import { taskClassifyCommand, TASK_CLASSIFY_HELP } from "./commands/task-classify.js";
 import { DESCRIPTION } from "./description.js";
 import { loadEffectivePolicy } from "./policy/index.js";
 import { collapseHome, helpBlock, toon } from "./render.js";
@@ -16,9 +18,9 @@ export { DESCRIPTION };
 
 const LANE_COUNT = 15;
 
-export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record> [flags]
-commands[6]:
-  policy=<init|show|validate>, route, select, explain, capacity, record
+export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record|classify|doctor> [flags]
+commands[8]:
+  policy=<init|show|validate>, route, select, explain, capacity, record, classify, doctor
   route chain=<harness step-down walk>
 flags[2]:
   --help, -v/--version
@@ -31,6 +33,8 @@ examples:
   llm-router-axi capacity check
   llm-router-axi capacity --for suite
   llm-router-axi record --provider cursor --outcome rate_limit --task t-42
+  llm-router-axi classify --task "Fix the login retry bug" --json
+  llm-router-axi doctor
 `;
 
 export type MainOptions = {
@@ -51,7 +55,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
       explain: (args) => explainCommand(args),
       capacity: (args) => capacityCommand(args),
       "classify-evidence": (args) => classifyCommand(args),
-      classify: (args) => classifyCommand(args),
+      classify: (args) => taskClassifyCommand(args),
+      doctor: (args) => doctorCommand(args),
       record: (args) => recordCommand(args),
       policy: (args) => policyCommand(args),
     },
@@ -69,8 +74,11 @@ export async function main(options: MainOptions = {}): Promise<void> {
         case "capacity":
           return CAPACITY_HELP;
         case "classify":
+          return TASK_CLASSIFY_HELP;
         case "classify-evidence":
           return CLASSIFY_HELP;
+        case "doctor":
+          return DOCTOR_HELP;
         case "record":
           return RECORD_HELP;
         default:

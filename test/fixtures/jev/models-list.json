@@ -1,0 +1,9 @@
+{
+  "comment": "Recorded fixture: GET /v1/models response for the doctor health probe. Follows the documented models listing shape (name, description, release_date per entry).",
+  "response": {
+    "models": [
+      { "name": "jev-latest", "description": "The most recent stable, official release.", "release_date": "2026-09-15" },
+      { "name": "jev-preview", "description": "The most recent release, preview or official.", "release_date": "2026-09-15" }
+    ]
+  }
+}

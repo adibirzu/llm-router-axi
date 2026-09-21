@@ -71,6 +71,8 @@ llm-router-axi explain --kind review --difficulty hard --surface docs
 llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 llm-router-axi capacity check
 llm-router-axi capacity --for local-llm
+llm-router-axi classify --task "Fix the login retry bug" --json
+llm-router-axi doctor
 ```
 
 - `route` picks harness/model/effort/provider/pool with a `reason`, ordered
@@ -104,6 +106,40 @@ OpenCode Go model beats a subscription with more headroom; a candidate is skippe
 only for reserve, cooldown, stale telemetry, or machine capacity. `spendPriority`
 (and then least-recent use) breaks a tie only among candidates sharing a chain
 rank.
+
+## Jev (Slice 1: classify only, never routes)
+
+> **Nothing routes real traffic through Jev until the lab's
+> `docs/when-to-route.md` verdict exists and the captain says go.** This
+> slice only classifies and never affects `route`.
+
+Jev is TypeSafe AI's System One model: typed, calibrated decisions
+(classification, routing, scoring, extraction) over unstructured state —
+not a text generator. `llm-router-axi` talks to it through a small
+fetch-based client (`src/jev/`, built only from the documented
+`POST /v1/systemone` + `GET /v1/models` contract):
+
+```sh
+llm-router-axi classify --task "Fix the login retry bug in api/auth.py" --json
+llm-router-axi classify --task ./TASK.md --full
+llm-router-axi doctor
+```
+
+- `classify --task <text|file|-> [--json] [--full]` returns the `route`
+  enums (`kind`, `difficulty`, `surface`) plus classifier-only
+  `reasoningClass`, `riskClass`, `toolAffinity`, each with confidence.
+  Output always carries `source: jev|fallback` (and a reason when it fell
+  back). A Jev answer below 0.5 confidence on kind/difficulty/surface
+  falls back. The deterministic heuristic fallback implements the same
+  schema, so the fleet keeps working with no key and no network.
+- `doctor` reports the `jev` check: key present yes/no (never the value),
+  one `GET /v1/models` probe when a key is present, latency in ms, and the
+  active path (`jev|fallback`). Without a key it exits cleanly and makes no
+  network call.
+- The key comes ONLY from `TYPESAFE_API_KEY` (never a flag); base URL from
+  `TYPESAFE_BASE_URL`, model from `TYPESAFE_DEFAULT_MODEL` (default
+  `jev-latest`). The key never appears in any output, error, log, or
+  fixture. Timeouts are 10s with one bounded retry on 429/529.
 
 Every command prints TOON by default; `--json` is the escape hatch. Exit codes:
 `0` success, `1` error, `2` usage error. Unknown flags are refused by name.

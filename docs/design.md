@@ -283,6 +283,28 @@ exposes the shared depletion detector (stdin default) and prints
 `action=harness-step|lane-move|exhausted`, `to_model`, `to_harness`, and the
 chain. It is the surface `bin/fm-model-fallback.sh` reads in P3.
 
+### 3.8 `classify` and `doctor` (Jev slice 1: classify only, never routes)
+
+Nothing routes real traffic through Jev until the lab's
+`docs/when-to-route.md` verdict exists and the captain says go. Slice 1
+only classifies: `classify` never changes a routing decision, `route` is
+untouched, and capacity/reserve/cooldown logic is exactly as is.
+
+`classify --task <text|file|-> [--json] [--full]` sends the task text as
+`state` with six `Choice` questions in one `POST /v1/systemone` call
+(kind/difficulty/surface reuse the `route` enums; reasoningClass/riskClass/
+toolAffinity are classifier-only). Output always carries
+`source: jev|fallback` plus a reason on fallback. A core-field answer below
+0.5 calibrated confidence falls back; no key, no network, a timeout, or a
+client error falls back too, via the deterministic extension/keyword/length
+heuristic (`src/jev/fallback.ts`), which implements the same schema with
+every field marked `heuristic: true`. `doctor` reports the `jev` check (key
+present yes/no, one read-only `GET /v1/models` probe, latencyMs, active
+path); without a key it exits 0 with no network call. The key comes ONLY
+from `TYPESAFE_API_KEY` and never appears in any output, error, or fixture
+(`test/jev.test.ts` proves it with a sentinel). Slices 2 (triage, pick) and
+3 (shadow hook in route + record) build on `src/jev/client.ts`.
+
 ## 4. Routing pipeline (implemented)
 
 The order is fixed by selector parity. `src/router.ts` and `src/selector.ts`

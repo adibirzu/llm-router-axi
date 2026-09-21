@@ -73,6 +73,8 @@ npx -y ${BIN} capacity check
 npx -y ${BIN} capacity --for suite
 npx -y ${BIN} capacity --for local-llm
 npx -y ${BIN} record --provider cursor --outcome rate_limit --task t-42
+npx -y ${BIN} classify --task "Fix the login retry bug" --json
+npx -y ${BIN} doctor
 \`\`\`
 
 \`route\` output: \`harness, model, effort, provider, pool, reason,
@@ -105,6 +107,18 @@ cached and reused so a route does not re-pay the slow OpenUsage refresh.
 \`record --outcome rate_limit\` parks the provider for the policy
 \`routing.cooldownSeconds\`; \`record --outcome ok\` clears it. Cooldown and
 least-recent-use state live under \`${STATE_PATH}\`.
+
+\`classify --task <text|file|->\` (Slice 1) classifies a task into the
+\`kind/difficulty/surface\` enums \`route\` accepts plus classifier-only
+\`reasoningClass/riskClass/toolAffinity\`, each with confidence. Output
+always carries \`source: jev|fallback\` (plus a reason on fallback). Jev is
+used only when \`${"TYPESAFE_API_KEY"}\` is set; otherwise a deterministic
+heuristic answers with the same schema, so the fleet works with no key and
+no network. Slice 1 only classifies: it never changes a routing decision.
+\`doctor\` reports the Jev check (key present yes/no, one models-listing
+probe, latencyMs, active path); without a key it exits cleanly and makes no
+network call. Nothing routes real traffic through Jev until the lab's
+\`docs/when-to-route.md\` verdict exists and the captain says go.
 
 ## Exit codes
 
