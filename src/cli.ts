@@ -4,11 +4,13 @@ import { capacityCommand, CAPACITY_HELP } from "./commands/capacity.js";
 import { classifyCommand, CLASSIFY_HELP } from "./commands/classify.js";
 import { doctorCommand, DOCTOR_HELP } from "./commands/doctor.js";
 import { explainCommand, EXPLAIN_HELP } from "./commands/explain.js";
+import { pickCommand, PICK_HELP } from "./commands/pick.js";
 import { policyCommand } from "./commands/policy.js";
 import { recordCommand, RECORD_HELP } from "./commands/record.js";
 import { routeCommand } from "./commands/route.js";
 import { selectCommand, SELECT_HELP } from "./commands/select.js";
 import { taskClassifyCommand, TASK_CLASSIFY_HELP } from "./commands/task-classify.js";
+import { triageCommand, TRIAGE_HELP } from "./commands/triage.js";
 import { DESCRIPTION } from "./description.js";
 import { loadEffectivePolicy } from "./policy/index.js";
 import { collapseHome, helpBlock, toon } from "./render.js";
@@ -18,9 +20,9 @@ export { DESCRIPTION };
 
 const LANE_COUNT = 15;
 
-export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record|classify|doctor> [flags]
-commands[8]:
-  policy=<init|show|validate>, route, select, explain, capacity, record, classify, doctor
+export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record|classify|doctor|triage|pick> [flags]
+commands[10]:
+  policy=<init|show|validate>, route, select, explain, capacity, record, classify, doctor, triage, pick
   route chain=<harness step-down walk>
 flags[2]:
   --help, -v/--version
@@ -34,6 +36,8 @@ examples:
   llm-router-axi capacity --for suite
   llm-router-axi record --provider cursor --outcome rate_limit --task t-42
   llm-router-axi classify --task "Fix the login retry bug" --json
+  llm-router-axi triage --evidence "failed: request failed with status code 429"
+  llm-router-axi pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
   llm-router-axi doctor
 `;
 
@@ -56,6 +60,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
       capacity: (args) => capacityCommand(args),
       "classify-evidence": (args) => classifyCommand(args),
       classify: (args) => taskClassifyCommand(args),
+      triage: (args) => triageCommand(args),
+      pick: (args) => pickCommand(args),
       doctor: (args) => doctorCommand(args),
       record: (args) => recordCommand(args),
       policy: (args) => policyCommand(args),
@@ -75,6 +81,10 @@ export async function main(options: MainOptions = {}): Promise<void> {
           return CAPACITY_HELP;
         case "classify":
           return TASK_CLASSIFY_HELP;
+        case "triage":
+          return TRIAGE_HELP;
+        case "pick":
+          return PICK_HELP;
         case "classify-evidence":
           return CLASSIFY_HELP;
         case "doctor":

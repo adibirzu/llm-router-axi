@@ -72,6 +72,8 @@ llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 llm-router-axi capacity check
 llm-router-axi capacity --for local-llm
 llm-router-axi classify --task "Fix the login retry bug" --json
+llm-router-axi triage --evidence "failed: request failed with status code 429" --json
+llm-router-axi pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
 llm-router-axi doctor
 ```
 
@@ -107,11 +109,11 @@ only for reserve, cooldown, stale telemetry, or machine capacity. `spendPriority
 (and then least-recent use) breaks a tie only among candidates sharing a chain
 rank.
 
-## Jev (Slice 1: classify only, never routes)
+## Jev (Slices 1-2: classify, triage, pick — never routes)
 
 > **Nothing routes real traffic through Jev until the lab's
-> `docs/when-to-route.md` verdict exists and the captain says go.** This
-> slice only classifies and never affects `route`.
+> `docs/when-to-route.md` verdict exists and the captain says go.** These
+> slices only classify, triage, and advise — they never affect `route`.
 
 Jev is TypeSafe AI's System One model: typed, calibrated decisions
 (classification, routing, scoring, extraction) over unstructured state —
@@ -122,6 +124,8 @@ fetch-based client (`src/jev/`, built only from the documented
 ```sh
 llm-router-axi classify --task "Fix the login retry bug in api/auth.py" --json
 llm-router-axi classify --task ./TASK.md --full
+llm-router-axi triage --evidence "failed: request failed with status code 429" --json
+llm-router-axi pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
 llm-router-axi doctor
 ```
 
@@ -132,6 +136,24 @@ llm-router-axi doctor
   back). A Jev answer below 0.5 confidence on kind/difficulty/surface
   falls back. The deterministic heuristic fallback implements the same
   schema, so the fleet keeps working with no key and no network.
+- `triage --evidence <text|file|-> [--json] [--full]` types a failure or
+  worker-outcome evidence string into a closed defect class
+  (`rate_limit|quota_exhausted|auth|region_refused|tool_error|test_failure|
+  timeout|unknown`) plus `retryable` and `needsHuman` booleans, each with
+  a probability. The depletion classes reuse the `classify-evidence`
+  vocabulary, so triage never contradicts it. The Jev path asks one
+  `Choice` plus two `Noul` questions in one call; a defect answer below
+  0.5 confidence falls back. Triage is read-only: it never changes
+  cooldown, record, or routing state.
+- `pick --task <text|file|-> --candidate <harness:model> ... [--json]
+  [--full]` chooses among the caller-named candidates and prints the
+  choice, a full ranking with probabilities, and reasons drawn ONLY from
+  a closed enum (never free text). Unknown (malformed) or duplicate
+  candidates are validation errors. The Jev path asks `selection` over
+  the names plus `reason` over the enum in one call, with the same 0.5
+  fallback floor; the deterministic fallback scores task-fit with ties
+  broken by name. Pick is advisory only: it consults no capacity,
+  reserve, or cooldown, and nothing calls it from `route`/`select`.
 - `doctor` reports the `jev` check: key present yes/no (never the value),
   one `GET /v1/models` probe when a key is present, latency in ms, and the
   active path (`jev|fallback`). Without a key it exits cleanly and makes no

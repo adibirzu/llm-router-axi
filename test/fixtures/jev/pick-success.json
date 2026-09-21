@@ -1,0 +1,45 @@
+{
+  "comment": "Recorded fixture: Jev pick request/response pair for test/jev-slice2.test.ts. No live key, no network: the HTTP layer is stubbed and replays this document. Two Choice questions: selection over the caller's candidate names (probabilities ARE the ranking) and reason over the closed reason enum.",
+  "request": {
+    "state": "Fix the login retry bug in api/auth.py: exponential backoff overshoots after 3 attempts",
+    "model": "jev-latest",
+    "questions": {
+      "selection": {
+        "type": "choice",
+        "instructions": "Which of these named candidates fits this task best?",
+        "criteria": {
+          "opencode:opencode-go/qwen3.8-flash": "Candidate \"opencode:opencode-go/qwen3.8-flash\" (harness:model pair).",
+          "claude:claude-opus": "Candidate \"claude:claude-opus\" (harness:model pair)."
+        }
+      },
+      "reason": {
+        "type": "choice",
+        "instructions": "Why does that candidate fit best?",
+        "criteria": {
+          "keyword-match": "The winner's name tokens appear in the task text.",
+          "name-order": "No task signal distinguished the candidates; stable name order decided.",
+          "single-candidate": "Only one candidate was supplied, so it wins by default.",
+          "model-judgment": "The model's calibrated judgment selected the winner."
+        }
+      }
+    }
+  },
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "selection": {
+        "type": "choice",
+        "choice": "opencode:opencode-go/qwen3.8-flash",
+        "probabilities": { "opencode:opencode-go/qwen3.8-flash": 0.68, "claude:claude-opus": 0.32 },
+        "confidence": 0.61
+      },
+      "reason": {
+        "type": "choice",
+        "choice": "model-judgment",
+        "probabilities": { "keyword-match": 0.2, "name-order": 0.05, "single-candidate": 0.0, "model-judgment": 0.75 },
+        "confidence": 0.7
+      }
+    },
+    "usage": { "input_tokens": 280, "output_tokens": 40 }
+  }
+}
