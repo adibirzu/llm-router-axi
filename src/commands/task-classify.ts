@@ -41,6 +41,7 @@ description:
   toolAffinity), each with a probability/confidence. Slice 1 only
   classifies: the output NEVER changes a routing decision and route is
   untouched. Capacity, reserve and cooldown logic stay exactly as is.
+  Nothing routes real traffic through Jev until the lab docs/when-to-route.md verdict exists and the captain says go.
 inputs:
   --task <text|file|->  literal task text; a path to a file to read when the
                         value names an existing file; - reads stdin
@@ -66,6 +67,8 @@ examples:
 
 export interface TaskClassifyDeps {
   fetchImpl?: FetchImpl;
+  /** Per-attempt Jev timeout in ms (test seam; defaults to the client default). */
+  timeoutMs?: number;
 }
 
 export async function taskClassifyCommand(
@@ -92,7 +95,7 @@ export async function taskClassifyCommand(
 
   const full = booleans.has("--full");
   const started = Date.now();
-  const result = await classifyTask(task, deps.fetchImpl);
+  const result = await classifyTask(task, deps);
   const latencyMs = Date.now() - started;
 
   if (!isClassifyResult(result)) {
@@ -137,14 +140,15 @@ function readTask(raw: string): string {
   return raw;
 }
 
-async function classifyTask(task: string, fetchImpl?: FetchImpl): Promise<ClassifyResult> {
+async function classifyTask(task: string, deps: TaskClassifyDeps): Promise<ClassifyResult> {
   if (!process.env[JEV_KEY_ENV]) {
     return heuristicClassify(task, `no ${JEV_KEY_ENV} in the environment; using heuristic fallback`);
   }
   let response;
   try {
     response = await evaluateSystemOne(task, CLASSIFY_QUESTIONS, {
-      ...(fetchImpl ? { fetchImpl } : {}),
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+      ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
     });
   } catch (error) {
     const reason = error instanceof JevError ? error.message : "Jev request failed";

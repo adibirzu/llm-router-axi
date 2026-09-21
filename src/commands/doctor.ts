@@ -40,6 +40,7 @@ description:
   active (jev|fallback). Without a key it exits cleanly with a structured
   message and makes no network call. Doctor is a diagnostic, not a gate:
   it exits 0 in every case; branch on status, not the exit code.
+  Nothing routes real traffic through Jev until the lab docs/when-to-route.md verdict exists and the captain says go.
   The docs define no dedicated health endpoint, so the models listing IS
   the health probe (see the gap list in src/jev/client.ts).
 checks[1]{name,status}:

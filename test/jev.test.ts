@@ -270,6 +270,55 @@ describe("classify (Jev path and fallback share one schema)", () => {
     expect(parsed.kind.value).toBe("review");
   });
 
+  it("falls back with source fallback on 401, leaking no key", async () => {
+    process.env.TYPESAFE_API_KEY = SENTINEL_KEY;
+    const output = await taskClassifyCommand(["--task", FIXTURE_TASK, "--json"], {
+      fetchImpl: stubFetch([], () => jsonResponse(401, { error: "bad key" })),
+    });
+    const parsed = JSON.parse(output) as ClassifyResult;
+    expect(parsed.source).toBe("fallback");
+    expect(parsed.reason).toContain("using heuristic fallback");
+    expect(isClassifyResult(parsed)).toBe(true);
+    expect(output).not.toContain(SENTINEL_KEY);
+  });
+
+  it("falls back after the bounded retry on persistent 529", async () => {
+    process.env.TYPESAFE_API_KEY = SENTINEL_KEY;
+    const calls: CapturedCall[] = [];
+    const output = await taskClassifyCommand(["--task", FIXTURE_TASK, "--json"], {
+      fetchImpl: stubFetch(calls, () =>
+        jsonResponse(529, { error: "overloaded" }, { "retry-after": "0" }),
+      ),
+    });
+    expect(calls).toHaveLength(2);
+    const parsed = JSON.parse(output) as ClassifyResult;
+    expect(parsed.source).toBe("fallback");
+    expect(parsed.reason).toContain("overloaded");
+    expect(isClassifyResult(parsed)).toBe(true);
+    expect(output).not.toContain(SENTINEL_KEY);
+  });
+
+  it("falls back with source fallback on timeout", async () => {
+    process.env.TYPESAFE_API_KEY = SENTINEL_KEY;
+    const hanging: FetchImpl = ((_input: any, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      })) as FetchImpl;
+    const output = await taskClassifyCommand(["--task", FIXTURE_TASK, "--json"], {
+      fetchImpl: hanging,
+      timeoutMs: 15,
+    });
+    const parsed = JSON.parse(output) as ClassifyResult;
+    expect(parsed.source).toBe("fallback");
+    expect(parsed.reason).toContain("timed out");
+    expect(isClassifyResult(parsed)).toBe(true);
+    expect(output).not.toContain(SENTINEL_KEY);
+  });
+
   it("falls back with a reason on transport failure, leaking no key", async () => {
     process.env.TYPESAFE_API_KEY = SENTINEL_KEY;
     const output = await taskClassifyCommand(["--task", FIXTURE_TASK, "--json"], {
@@ -471,6 +520,43 @@ describe("CLI surface (help, flags, key hygiene)", () => {
     const missing = await run(["classify"]);
     expect(missing.exitCode).toBe(2);
     expect(missing.output).toContain("--task");
+  });
+
+  it("never echoes an --api-key=<sentinel> value in classify or doctor errors", async () => {
+    // Direct command level: the AxiError itself must carry the name only.
+    const direct = await taskClassifyCommand([
+      `--api-key=${SENTINEL_KEY}`,
+      "--task",
+      "x",
+    ]).then(
+      () => "no-throw",
+      (error: unknown) => String((error as Error).message),
+    );
+    expect(direct).toContain("unknown flag --api-key ");
+    expect(direct).not.toContain(SENTINEL_KEY);
+
+    // Full CLI level: neither stdout nor the rendered error may leak it.
+    const classify = await run(["classify", `--api-key=${SENTINEL_KEY}`, "--task", "x"]);
+    expect(classify.exitCode).toBe(2);
+    expect(classify.output).toContain("unknown flag --api-key ");
+    expect(classify.output).not.toContain(SENTINEL_KEY);
+
+    const doctor = await run(["doctor", `--api-key=${SENTINEL_KEY}`]);
+    expect(doctor.exitCode).toBe(2);
+    expect(doctor.output).toContain("unknown flag --api-key ");
+    expect(doctor.output).not.toContain(SENTINEL_KEY);
+  });
+
+  it("states the routing freeze verbatim in classify and doctor --help", async () => {
+    const freeze =
+      "Nothing routes real traffic through Jev until the lab docs/when-to-route.md verdict exists and the captain says go";
+    const classifyHelp = await run(["classify", "--help"]);
+    expect(classifyHelp.exitCode).toBe(0);
+    expect(classifyHelp.output).toContain(freeze);
+
+    const doctorHelp = await run(["doctor", "--help"]);
+    expect(doctorHelp.exitCode).toBe(0);
+    expect(doctorHelp.output).toContain(freeze);
   });
 
   it("keeps classify-evidence on its depletion contract", async () => {
