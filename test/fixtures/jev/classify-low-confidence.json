@@ -1,0 +1,45 @@
+{
+  "comment": "Recorded fixture: low-confidence Jev classify response. Core-field confidence below the 0.5 floor must fall back with a reason. Same documented answers/usage shape as classify-success.json.",
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "kind": {
+        "type": "choice",
+        "choice": "ship",
+        "probabilities": { "ship": 0.3, "scout": 0.28, "review": 0.1, "architecture": 0.2, "admin": 0.12 },
+        "confidence": 0.12
+      },
+      "difficulty": {
+        "type": "choice",
+        "choice": "medium",
+        "probabilities": { "easy": 0.33, "medium": 0.34, "hard": 0.33 },
+        "confidence": 0.05
+      },
+      "surface": {
+        "type": "choice",
+        "choice": "mixed",
+        "probabilities": { "backend": 0.3, "frontend": 0.25, "docs": 0.1, "infra": 0.05, "mixed": 0.3 },
+        "confidence": 0.1
+      },
+      "reasoningClass": {
+        "type": "choice",
+        "choice": "code-gen",
+        "probabilities": { "code-gen": 0.4, "debug": 0.3, "review": 0.1, "architecture": 0.15, "docs": 0.05 },
+        "confidence": 0.2
+      },
+      "riskClass": {
+        "type": "choice",
+        "choice": "medium",
+        "probabilities": { "low": 0.3, "medium": 0.4, "high": 0.3 },
+        "confidence": 0.15
+      },
+      "toolAffinity": {
+        "type": "choice",
+        "choice": "none",
+        "probabilities": { "browser": 0.2, "shell": 0.2, "git": 0.2, "db": 0.1, "none": 0.3 },
+        "confidence": 0.12
+      }
+    },
+    "usage": { "input_tokens": 480, "output_tokens": 60 }
+  }
+}
