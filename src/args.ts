@@ -44,7 +44,10 @@ export function parseArgs(
 
     const spec = byName.get(name);
     if (!spec) {
-      throw new AxiError(`unknown flag ${arg} for \`${command}\``, "VALIDATION_ERROR", [
+      // Report the flag NAME only: echoing the whole token would print an
+      // `--api-key=SECRET` value back into output and errors. The key (or
+      // any other secret passed by mistake) must never appear anywhere.
+      throw new AxiError(`unknown flag ${name} for \`${command}\``, "VALIDATION_ERROR", [
         `valid flags for \`${command}\`: ${validFlags(specs)}`,
         `Run \`llm-router-axi ${command} --help\` for the contract`,
       ]);

@@ -1,0 +1,113 @@
+{
+  "comment": "Recorded fixture: Jev classify request/response pair for test/jev.test.ts. No live key, no network: the HTTP layer is stubbed and replays this document. Request shape follows POST /v1/systemone (state, model, questions); response shape follows the documented answers/usage body.",
+  "request": {
+    "state": "Fix the login retry bug in api/auth.py: exponential backoff overshoots after 3 attempts",
+    "model": "jev-latest",
+    "questions": {
+      "kind": {
+        "type": "choice",
+        "instructions": "What kind of work does this task describe?",
+        "criteria": {
+          "ship": "Implement, fix, or change code to deliver something.",
+          "scout": "Explore, investigate, or research without changing code yet.",
+          "review": "Review someone else's change and give feedback.",
+          "architecture": "Design a system, decide trade-offs, write an RFC or proposal.",
+          "admin": "Chores: cleanup, releases, dependencies, routine maintenance."
+        }
+      },
+      "difficulty": {
+        "type": "choice",
+        "instructions": "How difficult is this task for a capable engineer?",
+        "criteria": {
+          "easy": "Small, well-scoped, under an hour: typo, rename, single-file tweak.",
+          "medium": "A focused change touching a few files, normal feature or fix.",
+          "hard": "Large, ambiguous, or risky: migration, rewrite, cross-service refactor."
+        }
+      },
+      "surface": {
+        "type": "choice",
+        "instructions": "Which part of the codebase does this task touch?",
+        "criteria": {
+          "backend": "Server-side code, APIs, services, CLIs.",
+          "frontend": "UI, pages, components, styles, client rendering.",
+          "docs": "Prose documentation, READMEs, guides.",
+          "infra": "Deploy, CI/CD, containers, IaC, pipelines.",
+          "mixed": "More than one of the above, or no clear single surface."
+        }
+      },
+      "reasoningClass": {
+        "type": "choice",
+        "instructions": "What kind of reasoning does this task need?",
+        "criteria": {
+          "code-gen": "Write new code or extend existing code.",
+          "debug": "Diagnose a failure: error, bug, crash, failing test.",
+          "review": "Read and judge a change made by someone else.",
+          "architecture": "Make structural or design decisions.",
+          "docs": "Write or restructure prose."
+        }
+      },
+      "riskClass": {
+        "type": "choice",
+        "instructions": "What is the blast radius if this task is done wrong?",
+        "criteria": {
+          "low": "Cosmetic or fully reversible: typo, comment, rename.",
+          "medium": "Normal change with tests and review as the safety net.",
+          "high": "Production data, auth, payments, migrations, irreversible actions."
+        }
+      },
+      "toolAffinity": {
+        "type": "choice",
+        "instructions": "Which tool family would do most of this task?",
+        "criteria": {
+          "browser": "Needs a browser: pages, clicks, visual checks.",
+          "shell": "Needs a shell: scripts, servers, deploys, CI, CLIs.",
+          "git": "Mostly version control: merges, rebases, branches, PRs.",
+          "db": "Mostly data: SQL, queries, migrations.",
+          "none": "No tool family dominates; plain reasoning or prose."
+        }
+      }
+    }
+  },
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "kind": {
+        "type": "choice",
+        "choice": "ship",
+        "probabilities": { "ship": 0.9, "scout": 0.04, "review": 0.01, "architecture": 0.03, "admin": 0.02 },
+        "confidence": 0.87
+      },
+      "difficulty": {
+        "type": "choice",
+        "choice": "easy",
+        "probabilities": { "easy": 0.78, "medium": 0.18, "hard": 0.04 },
+        "confidence": 0.7
+      },
+      "surface": {
+        "type": "choice",
+        "choice": "backend",
+        "probabilities": { "backend": 0.85, "frontend": 0.02, "docs": 0.01, "infra": 0.04, "mixed": 0.08 },
+        "confidence": 0.8
+      },
+      "reasoningClass": {
+        "type": "choice",
+        "choice": "debug",
+        "probabilities": { "code-gen": 0.2, "debug": 0.72, "review": 0.02, "architecture": 0.04, "docs": 0.02 },
+        "confidence": 0.64
+      },
+      "riskClass": {
+        "type": "choice",
+        "choice": "medium",
+        "probabilities": { "low": 0.25, "medium": 0.6, "high": 0.15 },
+        "confidence": 0.52
+      },
+      "toolAffinity": {
+        "type": "choice",
+        "choice": "shell",
+        "probabilities": { "browser": 0.02, "shell": 0.55, "git": 0.1, "db": 0.03, "none": 0.3 },
+        "confidence": 0.5
+      }
+    },
+    "usage": { "input_tokens": 512, "output_tokens": 60 }
+  }
+}
