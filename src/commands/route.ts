@@ -11,11 +11,14 @@ import {
 } from "./descriptor.js";
 import { chainCommand } from "./chain.js";
 import { evaluateDescriptor } from "./evaluate.js";
+import { JEV_FREEZE, runRouteShadow, type ShadowDecision } from "../jev/shadow.js";
+import type { FetchImpl } from "../jev/client.js";
 import { helpBlock, toon } from "../render.js";
 import type { RouterResult } from "../router.js";
 
 const ROUTE_FLAGS: FlagSpec[] = [
   ...DESCRIPTOR_FLAGS,
+  { name: "--task", value: "text|file|-", description: "Task text for the Jev shadow hook only; never affects the routing decision" },
   { name: "--flags", description: `Print ${FM_SPAWN_FLAGS} for fm-spawn` },
 ];
 
@@ -23,6 +26,7 @@ export const ROUTE_HELP = `usage: llm-router-axi route --kind <kind> --difficult
 description: Choose one harness/model/effort from the policy lanes plus live usage.
   Spawn admission never refuses because a test suite is running; gate a suite
   start with \`llm-router-axi capacity --for suite\`.
+  ${JEV_FREEZE}
 inputs:
   --kind <ship|scout|review|architecture|admin>
   --difficulty <easy|medium|hard>
@@ -30,6 +34,7 @@ inputs:
   --size <changed-lines>       optional size hint
   --needs <a,b,c>              optional capability needs (vision, long-context, tools)
   --project <name>             optional project scope
+  --task <text|file|->         task text for the Jev shadow hook only (never affects routing; recorded only when jev.shadow is enabled)
   --usage-json <path>          usage telemetry fixture instead of usage-axi
   --now <epoch>                fix the current epoch second (test seam)
   --json                       emit the same decision as JSON
@@ -44,7 +49,14 @@ examples:
   llm-router-axi route --kind scout --difficulty easy --surface mixed --flags
 `;
 
-export async function routeCommand(args: string[]): Promise<string> {
+export interface RouteDeps {
+  /** Injected Jev transport for the shadow hook (tests stub this; the CLI uses global fetch). */
+  fetchImpl?: FetchImpl;
+  /** Shadow total budget and per-attempt classify timeout in ms (test seam). */
+  timeoutMs?: number;
+}
+
+export async function routeCommand(args: string[], deps: RouteDeps = {}): Promise<string> {
   if (args[0] === "chain") {
     return chainCommand(args.slice(1));
   }
@@ -59,7 +71,7 @@ export async function routeCommand(args: string[]): Promise<string> {
     "--difficulty",
     DIFFICULTY_VALUES,
   );
-  requireEnum(values.get("--surface"), "--surface", SURFACE_VALUES);
+  const surface = requireEnum(values.get("--surface"), "--surface", SURFACE_VALUES);
   const now = requireInteger(values.get("--now"), "--now");
 
   const missing = [
@@ -82,6 +94,27 @@ export async function routeCommand(args: string[]): Promise<string> {
     ...(now !== undefined ? { now } : {}),
   });
   const { result } = evaluation;
+
+  // Slice 3 shadow hook: bounded, silent, and read-only. It records the
+  // Jev-derived descriptor next to the supplied one and never changes the
+  // decision, the output, or the exit code computed below.
+  const taskRaw = values.get("--task");
+  await runRouteShadow(
+    {
+      policy: evaluation.policy,
+      kind: kind as string,
+      difficulty: difficulty as string,
+      ...(surface ? { surface: surface as string } : {}),
+      ...(taskRaw !== undefined ? { taskRaw } : {}),
+      ...(usageJson ? { usageJson } : {}),
+      now: evaluation.now,
+      decision: toShadowDecision(result.decision),
+    },
+    {
+      ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
+      ...(deps.timeoutMs !== undefined ? { timeoutMs: deps.timeoutMs } : {}),
+    },
+  );
 
   if (!result.report.ok || !result.decision) {
     return renderRefusal(result);
@@ -152,6 +185,21 @@ function renderCapacityRefusal(result: RouterResult): string {
       "Run `usage-axi machine` for the live measurement",
     ]),
   );
+}
+
+/**
+ * Project the routing decision onto the shadow ledger's decision shape.
+ * Refusals (no decision) become null; the hook records, never decides.
+ */
+function toShadowDecision(
+  decision: RouterResult["decision"],
+): ShadowDecision | null {
+  if (!decision) return null;
+  return {
+    harness: decision.harness,
+    ...(decision.model ? { model: decision.model } : {}),
+    ...(decision.effort ? { effort: decision.effort } : {}),
+  };
 }
 
 /** Shared candidate table for `explain` and route refusals. */
