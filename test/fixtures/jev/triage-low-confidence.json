@@ -1,0 +1,23 @@
+{
+  "comment": "Recorded fixture: low-confidence Jev triage response. Defect confidence below the 0.5 floor must fall back with a reason. Same documented answers/usage shape as triage-success.json.",
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "defect": {
+        "type": "choice",
+        "choice": "timeout",
+        "probabilities": { "rate_limit": 0.15, "quota_exhausted": 0.1, "auth": 0.1, "region_refused": 0.05, "tool_error": 0.15, "test_failure": 0.1, "timeout": 0.2, "unknown": 0.15 },
+        "confidence": 0.18
+      },
+      "retryable": {
+        "type": "noul",
+        "noul": 0.55
+      },
+      "needsHuman": {
+        "type": "noul",
+        "noul": 0.5
+      }
+    },
+    "usage": { "input_tokens": 300, "output_tokens": 48 }
+  }
+}

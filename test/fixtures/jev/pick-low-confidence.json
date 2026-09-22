@@ -1,0 +1,21 @@
+{
+  "comment": "Recorded fixture: low-confidence Jev pick response. Selection confidence below the 0.5 floor must fall back with a reason. Same documented answers/usage shape as pick-success.json.",
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "selection": {
+        "type": "choice",
+        "choice": "claude:claude-opus",
+        "probabilities": { "opencode:opencode-go/qwen3.8-flash": 0.52, "claude:claude-opus": 0.48 },
+        "confidence": 0.1
+      },
+      "reason": {
+        "type": "choice",
+        "choice": "name-order",
+        "probabilities": { "keyword-match": 0.2, "name-order": 0.4, "single-candidate": 0.0, "model-judgment": 0.4 },
+        "confidence": 0.3
+      }
+    },
+    "usage": { "input_tokens": 260, "output_tokens": 40 }
+  }
+}
