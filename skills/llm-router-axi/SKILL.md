@@ -63,6 +63,8 @@ npx -y llm-router-axi capacity --for suite
 npx -y llm-router-axi capacity --for local-llm
 npx -y llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 npx -y llm-router-axi classify --task "Fix the login retry bug" --json
+npx -y llm-router-axi triage --evidence "failed: request failed with status code 429" --json
+npx -y llm-router-axi pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
 npx -y llm-router-axi doctor
 ```
 
@@ -104,6 +106,14 @@ always carries `source: jev|fallback` (plus a reason on fallback). Jev is
 used only when `TYPESAFE_API_KEY` is set; otherwise a deterministic
 heuristic answers with the same schema, so the fleet works with no key and
 no network. Slice 1 only classifies: it never changes a routing decision.
+`triage --evidence <text|file|->` (Slice 2) types failure evidence into
+a closed defect class plus `retryable`/`needsHuman` booleans, each with
+a probability; it reuses the `classify-evidence` vocabulary first and is
+read-only over cooldown/record/routing state. `pick --task <text|file|->
+--candidate <harness:model> ...` (Slice 2) chooses among caller-named
+candidates with a ranked distribution and closed-enum reasons only; it is
+advisory (no capacity/reserve/cooldown, nothing calls it from
+`route`/`select`).
 `doctor` reports the Jev check (key present yes/no, one models-listing
 probe, latencyMs, active path); without a key it exits cleanly and makes no
 network call. Nothing routes real traffic through Jev until the lab's

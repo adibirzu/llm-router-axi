@@ -1,0 +1,51 @@
+{
+  "comment": "Recorded fixture: Jev triage request/response pair for test/jev-slice2.test.ts. No live key, no network: the HTTP layer is stubbed and replays this document. Request shape follows POST /v1/systemone (state, model, questions); response shape follows the documented answers/usage body (one Choice plus two Noul answers).",
+  "request": {
+    "state": "failed: request failed with status code 429",
+    "model": "jev-latest",
+    "questions": {
+      "defect": {
+        "type": "choice",
+        "instructions": "What kind of failure does this evidence describe?",
+        "criteria": {
+          "rate_limit": "A rate limit or too-many-requests refusal: retrying later may succeed.",
+          "quota_exhausted": "A quota, credit, allowance, or budget that is used up or exhausted.",
+          "auth": "Authentication or authorization failed: bad key, 401/403, permission denied.",
+          "region_refused": "Refused for the caller's region or geography, not for load or quota.",
+          "tool_error": "A tool, command, or environment step failed (exit code, missing binary).",
+          "test_failure": "A test suite ran and failed: assertion, failing test, red build.",
+          "timeout": "The operation timed out or exceeded its deadline.",
+          "unknown": "None of the above fits; the evidence is unclear."
+        }
+      },
+      "retryable": {
+        "type": "noul",
+        "instructions": "Would retrying the same operation, unchanged, plausibly succeed?"
+      },
+      "needsHuman": {
+        "type": "noul",
+        "instructions": "Does this failure need a human to look before the fleet continues?"
+      }
+    }
+  },
+  "response": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "defect": {
+        "type": "choice",
+        "choice": "rate_limit",
+        "probabilities": { "rate_limit": 0.82, "quota_exhausted": 0.1, "auth": 0.01, "region_refused": 0.01, "tool_error": 0.02, "test_failure": 0.01, "timeout": 0.02, "unknown": 0.01 },
+        "confidence": 0.78
+      },
+      "retryable": {
+        "type": "noul",
+        "noul": 0.85
+      },
+      "needsHuman": {
+        "type": "noul",
+        "noul": 0.12
+      }
+    },
+    "usage": { "input_tokens": 320, "output_tokens": 48 }
+  }
+}

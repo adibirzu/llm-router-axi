@@ -283,12 +283,13 @@ exposes the shared depletion detector (stdin default) and prints
 `action=harness-step|lane-move|exhausted`, `to_model`, `to_harness`, and the
 chain. It is the surface `bin/fm-model-fallback.sh` reads in P3.
 
-### 3.8 `classify` and `doctor` (Jev slice 1: classify only, never routes)
+### 3.8 `classify`, `triage`, `pick`, and `doctor` (Jev slices 1-2: never routes)
 
 Nothing routes real traffic through Jev until the lab's
-`docs/when-to-route.md` verdict exists and the captain says go. Slice 1
-only classifies: `classify` never changes a routing decision, `route` is
-untouched, and capacity/reserve/cooldown logic is exactly as is.
+`docs/when-to-route.md` verdict exists and the captain says go. Slices 1-2
+only classify, triage, and advise: none of them changes a routing decision,
+`route`/`select` are untouched, and capacity/reserve/cooldown logic is
+exactly as is.
 
 `classify --task <text|file|-> [--json] [--full]` sends the task text as
 `state` with six `Choice` questions in one `POST /v1/systemone` call
@@ -298,12 +299,45 @@ toolAffinity are classifier-only). Output always carries
 0.5 calibrated confidence falls back; no key, no network, a timeout, or a
 client error falls back too, via the deterministic extension/keyword/length
 heuristic (`src/jev/fallback.ts`), which implements the same schema with
-every field marked `heuristic: true`. `doctor` reports the `jev` check (key
+every field marked `heuristic: true`.
+
+`triage --evidence <text|file|-> [--json] [--full]` types a failure or
+worker-outcome evidence string into a closed defect class
+(`rate_limit|quota_exhausted|auth|region_refused|tool_error|test_failure|
+timeout|unknown`) plus `retryable` and `needsHuman` booleans, each with a
+probability (`src/jev/triage.ts`). The Jev path asks one `Choice` (defect)
+plus two `Noul` (retryable, needsHuman) questions in a single
+`POST /v1/systemone` call; a defect answer below 0.5 calibrated confidence
+falls back. The deterministic fallback decides depletion FIRST with the
+shared `classify-evidence` vocabulary (`classifyEvidence` in
+`src/selector.ts`), so triage can never contradict the depletion detector
+(depletion becomes `rate_limit`, or `quota_exhausted` when quota/credit/
+allowance wording is present), then falls through keyword heuristics for
+the remaining classes. Triage is read-only: it imports no state module and
+never changes cooldown, record, or routing state.
+
+`pick --task <text|file|-> --candidate <harness:model> ... [--json]
+[--full]` chooses among the caller-named candidates (`src/jev/pick.ts`,
+`src/commands/pick.ts`). Output is the `choice` (always one of the
+caller's names), a `ranking` of every candidate best-first with
+probabilities summing to 1, and `reasons` drawn ONLY from the closed
+`PICK_REASON_VALUES` enum (never free text — refused by schema and test).
+A candidate is a `harness:model` name (two non-empty sides around one
+colon; no doctrine is hard-coded); anything else is refused as an unknown
+candidate and an exact repeat as a duplicate, both validation errors. The
+Jev path asks `selection` over the names (its probabilities ARE the
+ranking) plus `reason` over the enum in one call, with the same 0.5
+fallback floor on selection confidence. The deterministic fallback scores
+task-fit (name-token overlap with the task text, Laplace-smoothed shares),
+ties broken by name. Pick is advisory only: it consults no capacity,
+reserve, or cooldown, and nothing calls it from `route`/`select`.
+
+`doctor` reports the `jev` check (key
 present yes/no, one read-only `GET /v1/models` probe, latencyMs, active
 path); without a key it exits 0 with no network call. The key comes ONLY
 from `TYPESAFE_API_KEY` and never appears in any output, error, or fixture
-(`test/jev.test.ts` proves it with a sentinel). Slices 2 (triage, pick) and
-3 (shadow hook in route + record) build on `src/jev/client.ts`.
+(`test/jev.test.ts` and `test/jev-slice2.test.ts` prove it with a sentinel).
+Slice 3 (shadow hook in route + record) builds on `src/jev/client.ts`.
 
 ## 4. Routing pipeline (implemented)
 
