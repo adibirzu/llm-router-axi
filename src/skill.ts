@@ -77,6 +77,7 @@ npx -y ${BIN} classify --task "Fix the login retry bug" --json
 npx -y ${BIN} triage --evidence "failed: request failed with status code 429" --json
 npx -y ${BIN} pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
 npx -y ${BIN} doctor
+npx -y ${BIN} shadow report
 \`\`\`
 
 \`route\` output: \`harness, model, effort, provider, pool, reason,
@@ -129,6 +130,19 @@ advisory (no capacity/reserve/cooldown, nothing calls it from
 probe, latencyMs, active path); without a key it exits cleanly and makes no
 network call. Nothing routes real traffic through Jev until the lab's
 \`docs/when-to-route.md\` verdict exists and the captain says go.
+
+Shadow mode (Slice 3) only observes: with \`jev.shadow.enabled: true\` in
+the policy (\`policy init\` writes \`false\`), \`route --task <text|file|->\`
+additionally classifies the task text with Jev and appends the Jev-derived
+descriptor beside the supplied one (plus per-field agreement and a
+read-only same-decision preview) to
+\`${STATE_PATH}/shadow-ledger.jsonl\`. The decision never changes; the hook
+has a 10s total budget and degrades silently to \`fallback\`/\`skipped\`.
+\`LLM_ROUTER_JEV_SHADOW=off\` is the kill switch and always wins over the
+config. \`record\` appends the outcome to the same ledger; \`shadow report
+[--json]\` summarises descriptor agreement, route agreement, and
+\`rate_limit\` outcomes plus the go criteria (>= 85% / >= 90% / no rise
+over 100+ tasks) as data, never as a routing decision.
 
 ## Exit codes
 

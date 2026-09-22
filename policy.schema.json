@@ -248,6 +248,24 @@
       },
       "description": "Named, ordered candidate lists. Lanes reference a group by name so the worker/reviewer/architect doctrine is declared once."
     },
+    "jev": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shadow": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Shadow-mode classify hook in route (slice 3): when true, route classifies --task text with Jev and records the descriptor beside the supplied one. Routing never changes; LLM_ROUTER_JEV_SHADOW=off always disables it."
+            }
+          },
+          "description": "Shadow-mode hook settings. Optional; absent means disabled."
+        }
+      },
+      "description": "Optional Jev settings. Absent means every Jev hook is disabled."
+    },
     "kinds": {
       "$ref": "#/definitions/kinds"
     },

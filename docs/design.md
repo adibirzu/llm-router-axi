@@ -337,7 +337,48 @@ present yes/no, one read-only `GET /v1/models` probe, latencyMs, active
 path); without a key it exits 0 with no network call. The key comes ONLY
 from `TYPESAFE_API_KEY` and never appears in any output, error, or fixture
 (`test/jev.test.ts` and `test/jev-slice2.test.ts` prove it with a sentinel).
-Slice 3 (shadow hook in route + record) builds on `src/jev/client.ts`.
+Slices 2 (triage, pick) and 3 (shadow hook in route + record, below) build
+on `src/jev/client.ts`.
+
+### 3.9 Shadow-mode classify hook (Jev slice 3: observe, never route)
+
+Nothing routes real traffic through Jev until the lab's
+`docs/when-to-route.md` verdict exists and the captain says go. The hook is
+deliberately small so the default behaviour stays byte-identical:
+
+- **Switch.** Policy `jev.shadow.enabled` (optional block; `policy init`
+  writes it `false`; `policy validate` refuses a non-boolean), plus the
+  environment kill switch `LLM_ROUTER_JEV_SHADOW=off`, which always wins
+  over the config. Disabled or killed, `route` output and exit codes are
+  byte-identical to before and zero network calls happen
+  (`test/shadow.test.ts` proves it on fixtures).
+- **`route --task <text|file|->`.** Task text for the hook only; routing
+  ignores it. When enabled, `route` classifies that text via the slice 1
+  client (reused, never forked) and appends one JSONL row to
+  `~/.local/state/llm-router-axi/shadow-ledger.jsonl`
+  (`LLM_ROUTER_SHADOW_FILE` overrides): supplied descriptor, Jev-derived
+  descriptor, per-field agreement, the real decision, and a read-only
+  `routeLane` preview of whether the Jev descriptor would have picked the
+  same harness/model/effort (state is loaded but never saved, so the
+  least-recent-use ledger and cooldowns are untouched). Budget: one client
+  timeout total (10s); any error, timeout, missing key, or fallback answer
+  degrades silently to a `fallback`/`skipped` row with no effect on the
+  decision or exit code.
+- **`record`.** Appends `{v, kind: "outcome", at, task, provider, outcome}`
+  rows to the same ledger through the existing record path; the cooldown
+  receipt is unchanged. Rows carry optional fields only, so old entries
+  and old readers still work (malformed lines and unknown kinds are
+  skipped, never fatal).
+- **`shadow report [--json]`.** Read-only (no network, no writes):
+  descriptor agreement per field (Jev-sourced rows only), route agreement,
+  `rate_limit` outcome counts, and the proposed go criteria (descriptor
+  agreement >= 85%, route agreement >= 90%, no rise in `rate_limit`
+  outcomes over 100+ tasks) as data, not as a decision. The rate criterion
+  stays undecided (`met: null`) until a human compares against the
+  pre-shadow baseline. The command can never enable live routing.
+- **Untouched.** Capacity, reserve, cooldown, `select`, and chain code
+  paths have no behavioural edit; the hook only passes the optional shadow
+  record through `route`/`record`.
 
 ## 4. Routing pipeline (implemented)
 

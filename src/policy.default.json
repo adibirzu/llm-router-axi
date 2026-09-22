@@ -38,6 +38,11 @@
     "tieBreaker": "least-recent-use",
     "preferKnown": true
   },
+  "jev": {
+    "shadow": {
+      "enabled": false
+    }
+  },
   "candidateGroups": {
     "architects": [
       { "harness": "claude", "provider": "claude" },

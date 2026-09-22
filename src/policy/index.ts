@@ -6,6 +6,8 @@ export type {
   Effort,
   FallbackSettings,
   Harness,
+  JevSettings,
+  JevShadowSettings,
   Kind,
   KindLanes,
   MemoryPressureMax,

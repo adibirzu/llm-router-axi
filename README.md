@@ -75,6 +75,7 @@ llm-router-axi classify --task "Fix the login retry bug" --json
 llm-router-axi triage --evidence "failed: request failed with status code 429" --json
 llm-router-axi pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
 llm-router-axi doctor
+llm-router-axi shadow report
 ```
 
 - `route` picks harness/model/effort/provider/pool with a `reason`, ordered
@@ -162,6 +163,46 @@ llm-router-axi doctor
   `TYPESAFE_BASE_URL`, model from `TYPESAFE_DEFAULT_MODEL` (default
   `jev-latest`). The key never appears in any output, error, log, or
   fixture. Timeouts are 10s with one bounded retry on 429/529.
+
+### Shadow mode (Slice 3: observe, never route)
+
+> **Nothing routes real traffic through Jev until the lab's
+> `docs/when-to-route.md` verdict exists and the captain says go.**
+> Shadow records what Jev *would have said* next to every real decision;
+> the decision itself always comes from the supplied descriptor.
+
+Off by default. Turn it on in the policy file, kill it instantly from the
+environment:
+
+```sh
+# on: policy.json -> jev.shadow.enabled = true (policy init writes false)
+llm-router-axi route --kind ship --difficulty medium --surface backend \
+  --task "Fix the login retry bug in api/auth.py"
+llm-router-axi shadow report            # agreement + go criteria as data
+LLM_ROUTER_JEV_SHADOW=off llm-router-axi route ...   # kill switch: always wins
+```
+
+- `route --task <text|file|->` supplies task text for the shadow hook only;
+  routing ignores it. When `jev.shadow.enabled` is true (and the kill
+  switch is off), `route` classifies that text in shadow and appends one
+  row to `~/.local/state/llm-router-axi/shadow-ledger.jsonl`
+  (`LLM_ROUTER_SHADOW_FILE` overrides): the Jev-derived descriptor next to
+  the supplied descriptor, per-field agreement, the real decision, and a
+  read-only preview of whether the Jev descriptor would have picked the
+  same harness/model/effort. The decision, output, and exit code are
+  unchanged. Shadow has a hard total budget of one client timeout (10s);
+  any Jev error, timeout, missing key, or fallback answer degrades
+  silently to a `fallback`/`skipped` row. Disabled (or killed), `route`
+  is byte-identical and makes zero network calls.
+- `record` additionally appends the outcome (`rate_limit`/`ok`) to the
+  same ledger, so agreement and outcome can later be analysed together.
+  The cooldown receipt is unchanged; old ledger entries still parse.
+- `shadow report [--json]` is read-only (no network, no writes): window
+  counts, descriptor agreement per field, route agreement, `rate_limit`
+  outcome counts, and the proposed go criteria (descriptor agreement >=
+  85%, route agreement >= 90%, no rise in `rate_limit` outcomes over 100+
+  tasks) as data, not as a decision. It never turns shadow into live
+  routing — a human still calls the verdict.
 
 Every command prints TOON by default; `--json` is the escape hatch. Exit codes:
 `0` success, `1` error, `2` usage error. Unknown flags are refused by name.
