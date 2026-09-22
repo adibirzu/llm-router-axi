@@ -1,6 +1,7 @@
 import { AxiError } from "axi-sdk-js";
 
 import { parseArgs, requireEnum, requireInteger, type FlagSpec } from "../args.js";
+import { appendLedgerRow, JEV_FREEZE } from "../jev/shadow.js";
 import { loadEffectivePolicy } from "../policy/index.js";
 import { collapseHome, helpBlock, toon } from "../render.js";
 import { setCooldown } from "../selector.js";
@@ -22,6 +23,8 @@ const RECORD_FLAGS: FlagSpec[] = [
 
 export const RECORD_HELP = `usage: llm-router-axi record --provider <name> --outcome <rate_limit|ok> --task <id> [flags]
 description: Record a provider outcome so the router applies a cooldown.
+  The outcome is also appended to the Jev shadow ledger for later
+  agreement analysis. ${JEV_FREEZE}
 inputs:
   --provider <name>          provider id from usage-axi (claude, cursor, opencode, ...)
   --outcome <rate_limit|ok>  a verified rate-limit/quota failure, or a clean success
@@ -72,6 +75,19 @@ export async function recordCommand(args: string[]): Promise<string> {
   }
   const cooldownSeconds = policy.policy.routing.cooldownSeconds;
   const recordedAt = now ?? Math.floor(Date.now() / 1000);
+
+  // Slice 3: store the outcome in the shadow ledger alongside the recorded
+  // shadow descriptors, so agreement and outcome can later be analysed by
+  // `shadow report`. Best-effort and additive: the cooldown receipt above is
+  // the contract, and old ledger entries still parse.
+  appendLedgerRow({
+    v: 1,
+    kind: "outcome",
+    at: recordedAt,
+    task: task as string,
+    provider: provider as string,
+    outcome: outcome as "rate_limit" | "ok",
+  });
 
   const statePath = dispatchStatePath();
   const receipt = withStateLock(() => {

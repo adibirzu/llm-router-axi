@@ -119,8 +119,10 @@ export async function taskClassifyCommand(
 /**
  * `--task` disambiguation, documented in --help: `-` reads stdin, a value
  * naming an existing file reads that file, otherwise the value IS the text.
+ * Exported for the slice 3 shadow hook, which resolves `route --task` the
+ * same way `classify --task` does.
  */
-function readTask(raw: string): string {
+export function readTask(raw: string): string {
   if (raw === "-") {
     try {
       return readFileSync(0, "utf8");
@@ -140,7 +142,13 @@ function readTask(raw: string): string {
   return raw;
 }
 
-async function classifyTask(task: string, deps: TaskClassifyDeps): Promise<ClassifyResult> {
+/**
+ * Classify one task text via Jev with the deterministic heuristic fallback.
+ * Exported for the slice 3 shadow hook, which reuses the `classify` client
+ * (never forks it). Never throws for Jev failures: they become `fallback`
+ * results with a reason.
+ */
+export async function classifyTask(task: string, deps: TaskClassifyDeps): Promise<ClassifyResult> {
   if (!process.env[JEV_KEY_ENV]) {
     return heuristicClassify(task, `no ${JEV_KEY_ENV} in the environment; using heuristic fallback`);
   }

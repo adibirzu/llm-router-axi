@@ -9,6 +9,7 @@ import { policyCommand } from "./commands/policy.js";
 import { recordCommand, RECORD_HELP } from "./commands/record.js";
 import { routeCommand } from "./commands/route.js";
 import { selectCommand, SELECT_HELP } from "./commands/select.js";
+import { shadowCommand, SHADOW_HELP } from "./commands/shadow.js";
 import { taskClassifyCommand, TASK_CLASSIFY_HELP } from "./commands/task-classify.js";
 import { triageCommand, TRIAGE_HELP } from "./commands/triage.js";
 import { DESCRIPTION } from "./description.js";
@@ -20,10 +21,11 @@ export { DESCRIPTION };
 
 const LANE_COUNT = 15;
 
-export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record|classify|doctor|triage|pick> [flags]
-commands[10]:
-  policy=<init|show|validate>, route, select, explain, capacity, record, classify, doctor, triage, pick
+export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record|classify|doctor|triage|pick|shadow> [flags]
+commands[11]:
+  policy=<init|show|validate>, route, select, explain, capacity, record, classify, doctor, triage, pick, shadow
   route chain=<harness step-down walk>
+  shadow report=<read-only shadow ledger summary>
 flags[2]:
   --help, -v/--version
 examples:
@@ -39,6 +41,7 @@ examples:
   llm-router-axi triage --evidence "failed: request failed with status code 429"
   llm-router-axi pick --task "Fix the login retry bug" --candidate opencode:opencode-go/qwen3.8-flash --candidate claude:claude-opus
   llm-router-axi doctor
+  llm-router-axi shadow report
 `;
 
 export type MainOptions = {
@@ -65,6 +68,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
       doctor: (args) => doctorCommand(args),
       record: (args) => recordCommand(args),
       policy: (args) => policyCommand(args),
+      shadow: (args) => shadowCommand(args),
     },
     home: () => homeView(),
     getCommandHelp: (command) => {
@@ -91,6 +95,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
           return DOCTOR_HELP;
         case "record":
           return RECORD_HELP;
+        case "shadow":
+          return SHADOW_HELP;
         default:
           // `policy` owns per-subcommand help inside its handler.
           return undefined;

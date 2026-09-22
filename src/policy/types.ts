@@ -99,6 +99,22 @@ export interface SpendPrioritySettings {
   preferKnown: boolean;
 }
 
+export interface JevShadowSettings {
+  /**
+   * Shadow-mode classify hook in `route` (slice 3): when true, `route
+   * --task <text>` additionally classifies the task text with Jev and
+   * records the Jev-derived descriptor next to the supplied one. The
+   * routing decision is always computed from the supplied descriptor and
+   * never changes. Optional; absent means disabled.
+   */
+  enabled?: boolean;
+}
+
+export interface JevSettings {
+  /** Shadow-mode hook settings. Optional; absent means disabled. */
+  shadow?: JevShadowSettings;
+}
+
 export interface Policy {
   $schema?: string;
   version: 1;
@@ -107,6 +123,11 @@ export interface Policy {
   pools: PoolSettings;
   spendPriority: SpendPrioritySettings;
   candidateGroups: Record<string, Candidate[]>;
+  /**
+   * Optional Jev settings (slice 3 shadow hook). Absent means every Jev
+   * hook is disabled; older policy files without it keep validating.
+   */
+  jev?: JevSettings;
   kinds: Record<Kind, KindLanes>;
   /**
    * The in-run step-down chains. Optional so an existing policy file written
