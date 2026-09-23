@@ -249,7 +249,9 @@ cooldown and update its least-recent-use ledger under
 `~/.local/state/llm-router-axi` (XDG-aware; `LLM_ROUTER_STATE_FILE` overrides
 the exact file for tests). Output is a receipt
 (`provider, outcome, task, cooldownUntil?, statePath`). `rate_limit` parks the
-provider; `ok` clears the cooldown. Selection writes the least-recent-use
+provider; `ok` clears the cooldown. `opencode` and `opencode-go` share one
+cooldown: a record under either spelling gates, and an `ok` under either
+clears, both (`cooldownKeys` in `src/selector.ts`). Selection writes the least-recent-use
 ledger; both persist across invocations.
 
 ### 3.5 `select` (arbitrary-profile compatibility)
