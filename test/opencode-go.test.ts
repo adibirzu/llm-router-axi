@@ -192,6 +192,37 @@ describe("opencode-go telemetry identity", () => {
     }
   });
 
+  for (const recorded of ["opencode", "opencode-go"]) {
+    it(`gates the Go lanes after a rate_limit recorded for provider ${recorded}, and ok clears it`, async () => {
+      writePolicy(cloneDefault());
+      const usageFile = writeJson("usage.json", opencodeGoUsage());
+      const routeArgs = ["route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--json"];
+
+      const before = await run(routeArgs);
+      expect(before.exitCode).toBe(0);
+      expect((JSON.parse(before.output) as { provider: string }).provider).toBe("opencode-go");
+
+      const rate = await run([
+        "record", "--provider", recorded, "--outcome", "rate_limit", "--task", "t-1", "--json",
+      ]);
+      expect(rate.exitCode).toBe(0);
+
+      const gated = await run(routeArgs);
+      expect(gated.exitCode).toBe(1);
+      expect(gated.output).toContain("NO_ELIGIBLE_CANDIDATE");
+      expect(gated.output).toMatch(/candidate provider=opencode-go unavailable: cooldown until epoch/);
+
+      const ok = await run([
+        "record", "--provider", recorded, "--outcome", "ok", "--task", "t-1", "--json",
+      ]);
+      expect(ok.exitCode).toBe(0);
+
+      const after = await run(routeArgs);
+      expect(after.exitCode).toBe(0);
+      expect((JSON.parse(after.output) as { provider: string }).provider).toBe("opencode-go");
+    });
+  }
+
   it("fails closed on every live window when the doctrine has no goWindows scope", async () => {
     const policy = cloneDefault();
     delete policy.pools.opencode.goWindows;

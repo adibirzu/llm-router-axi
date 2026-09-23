@@ -354,9 +354,24 @@ function knownSpendPriority(
   return Math.min(...pool.map((item) => item.spend));
 }
 
+const COOLDOWN_ALIASES: Record<string, string[]> = {
+  opencode: ["opencode", "opencode-go"],
+  "opencode-go": ["opencode-go", "opencode"],
+};
+
+export function cooldownKeys(provider: string): string[] {
+  return COOLDOWN_ALIASES[provider] ?? [provider];
+}
+
 function cooldownActive(state: EngineState, provider: string, now: number): Cooldown | null {
-  const item = state.cooldowns[provider];
-  return item && Number.isInteger(item.until) && item.until > now ? item : null;
+  let latest: Cooldown | null = null;
+  for (const key of cooldownKeys(provider)) {
+    const item = state.cooldowns[key];
+    if (item && Number.isInteger(item.until) && item.until > now && (!latest || item.until > latest.until)) {
+      latest = item;
+    }
+  }
+  return latest;
 }
 
 export function setCooldown(

@@ -4,7 +4,7 @@ import { parseArgs, requireEnum, requireInteger, type FlagSpec } from "../args.j
 import { appendLedgerRow, JEV_FREEZE } from "../jev/shadow.js";
 import { loadEffectivePolicy } from "../policy/index.js";
 import { collapseHome, helpBlock, toon } from "../render.js";
-import { setCooldown } from "../selector.js";
+import { cooldownKeys, setCooldown } from "../selector.js";
 import { dispatchStatePath, loadState, saveState, withStateLock } from "../state.js";
 
 const OUTCOME_VALUES = ["rate_limit", "ok"] as const;
