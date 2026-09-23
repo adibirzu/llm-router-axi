@@ -30,7 +30,8 @@
     "opencode": {
       "default": "opencode-go",
       "go": "opencode-go",
-      "free": "opencode"
+      "free": "opencode",
+      "goWindows": ["rolling", "weekly"]
     }
   },
   "spendPriority": {

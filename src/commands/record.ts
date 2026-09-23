@@ -26,7 +26,7 @@ description: Record a provider outcome so the router applies a cooldown.
   The outcome is also appended to the Jev shadow ledger for later
   agreement analysis. ${JEV_FREEZE}
 inputs:
-  --provider <name>          provider id from usage-axi (claude, cursor, opencode, ...)
+  --provider <name>          provider id from usage-axi (claude, cursor, opencode-go, ...)
   --outcome <rate_limit|ok>  a verified rate-limit/quota failure, or a clean success
   --task <id>                task id for the receipt
   --now <epoch>              fix the current epoch second (test seam)

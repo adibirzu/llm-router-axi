@@ -84,6 +84,7 @@ describe("default policy", () => {
     expect(policy.pools.agy.nonGemini).toContain("claude_gpt_5h");
     expect(policy.pools.opencode.go).toBe("opencode-go");
     expect(policy.pools.opencode.free).toBe("opencode");
+    expect(policy.pools.opencode.goWindows).toEqual(["rolling", "weekly"]);
   });
 
   it("declares the in-run step-down doctrine and the memory gauges", () => {

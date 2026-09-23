@@ -15,6 +15,16 @@ const NATIVE_PROVIDER: ReadonlyMap<string, string> = new Map([
   ["agy", "agy"],
 ]);
 
+/**
+ * Telemetry identity of the paid OpenCode subscription. quota-axi publishes
+ * it as provider `opencode-go` (fresh windows, unknown joint semantics, no
+ * pools[]); the legacy OpenUsage row is provider `opencode` with pools[].
+ * A Go-pool candidate resolves to whichever row is live, preferring
+ * `opencode-go`, so the lanes keep routing after OpenUsage went away on
+ * hosts where only quota-axi reports the subscription.
+ */
+const OPENCODE_GO_TELEMETRY = "opencode-go";
+
 const DEFAULT_USAGE_AXI = "usage-axi";
 
 /**
@@ -187,6 +197,19 @@ function resolvePool(
       return { poolWindows: opencodeWindows(provider, opencode.free), poolLabel: opencode.free };
     }
   }
+  if (providerName === OPENCODE_GO_TELEMETRY) {
+    // The quota-axi row carries no pools[], so the doctrine scopes the paid
+    // pool to its allowance windows (policy `pools.opencode.goWindows`, the
+    // same shape as agy's `gemini` list). A declared window absent from
+    // telemetry still fails closed in priceDeclaredPool; without a scope the
+    // pool falls back to every live window, exactly like the legacy row.
+    const opencode = policy.pools.opencode;
+    const scoped = opencode.goWindows;
+    if (scoped && scoped.length > 0) {
+      return { poolWindows: [...scoped], poolLabel: opencode.go };
+    }
+    return { poolWindows: opencodeWindows(provider, opencode.go), poolLabel: opencode.go };
+  }
 
   return { quotaWindow: declared, poolWindows: [declared] };
 }
@@ -213,6 +236,29 @@ function opencodeWindows(provider: QuotaProvider | undefined, poolId: string): s
   return live;
 }
 
+/**
+ * Telemetry row an opencode-harness candidate with the declared `opencode`
+ * provider draws on. A Go-pool candidate (pool name, legacy `go` alias, or
+ * `opencode-go/` model prefix via the effective pool) resolves to the live
+ * `opencode-go` row when quota-axi reports it, else the legacy `opencode`
+ * row; with neither live it names `opencode-go` so the refusal points at the
+ * awaited subscription identity. Every other pool keeps `opencode`, so the
+ * free pool still fails closed when it has no telemetry of its own.
+ */
+function opencodeTelemetryProvider(
+  policy: Policy,
+  candidate: Candidate,
+  quota: QuotaRead,
+): string {
+  const pool = candidatePoolName(policy, candidate);
+  if (pool === policy.pools.opencode.go || pool === "go") {
+    if (usageProvider(quota, OPENCODE_GO_TELEMETRY)) return OPENCODE_GO_TELEMETRY;
+    if (usageProvider(quota, "opencode")) return "opencode";
+    return OPENCODE_GO_TELEMETRY;
+  }
+  return "opencode";
+}
+
 function poolFromWindows(windowIds: string[], label: string): PoolDeclaration {
   if (windowIds.length === 1) {
     return { quotaWindow: windowIds[0], poolWindows: windowIds };
@@ -229,7 +275,10 @@ export function candidateToProfile(
 ): { profile: EngineProfile } | { error: string } {
   const resolved = resolveProvider(candidate.harness, candidate.provider);
   if ("error" in resolved) return resolved;
-  const provider = resolved.provider;
+  const provider =
+    candidate.harness === "opencode" && resolved.provider === "opencode"
+      ? opencodeTelemetryProvider(policy, candidate, quota)
+      : resolved.provider;
   const pool = resolvePool(policy, candidate, provider, quota);
   const profile: EngineProfile = {
     harness: candidate.harness,
