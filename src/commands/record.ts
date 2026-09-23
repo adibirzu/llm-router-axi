@@ -103,7 +103,7 @@ export async function recordCommand(args: string[]): Promise<string> {
         statePath: collapseHome(statePath),
       };
     }
-    delete state.cooldowns[provider as string];
+    for (const key of cooldownKeys(provider as string)) delete state.cooldowns[key];
     saveState(state);
     return {
       provider,

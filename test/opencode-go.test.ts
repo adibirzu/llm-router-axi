@@ -192,8 +192,9 @@ describe("opencode-go telemetry identity", () => {
     }
   });
 
-  for (const recorded of ["opencode", "opencode-go"]) {
-    it(`gates the Go lanes after a rate_limit recorded for provider ${recorded}, and ok clears it`, async () => {
+  const spellings = ["opencode", "opencode-go"];
+  for (const [recorded, cleared] of spellings.flatMap((a) => spellings.map((b) => [a, b] as const))) {
+    it(`gates the Go lanes after a rate_limit recorded for ${recorded}, and ok for ${cleared} clears it`, async () => {
       writePolicy(cloneDefault());
       const usageFile = writeJson("usage.json", opencodeGoUsage());
       const routeArgs = ["route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--json"];
@@ -213,7 +214,7 @@ describe("opencode-go telemetry identity", () => {
       expect(gated.output).toMatch(/candidate provider=opencode-go unavailable: cooldown until epoch/);
 
       const ok = await run([
-        "record", "--provider", recorded, "--outcome", "ok", "--task", "t-1", "--json",
+        "record", "--provider", cleared, "--outcome", "ok", "--task", "t-1", "--json",
       ]);
       expect(ok.exitCode).toBe(0);
 
