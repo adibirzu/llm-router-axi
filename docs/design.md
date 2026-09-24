@@ -247,8 +247,9 @@ check --harness <name> --model <id> [--force-override] [--json]
 Resolves the override through its matching policy candidate group and applies
 the same selector and spawn-capacity paths as `route`/`select`. A dead override
 exits `1` with `OVERRIDE_REFUSED`, the selector's exact refusal reason, and the
-next eligible candidate in that group. `--force-override` exits `0` and appends
-a credential-free JSONL audit record under
+next eligible candidate in that group, which must also pass the machine-capacity
+verdict. `--force-override` exits `0` and, only when the override would
+otherwise have been refused, appends a credential-free JSONL audit record under
 `~/.local/state/llm-router-axi/override-audit.jsonl`
 (`LLM_ROUTER_OVERRIDE_LOG` overrides the path for tests). Probing does not rotate
 least-recent-use state; telemetry-derived cooldown evidence is still persisted.

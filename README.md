@@ -92,8 +92,9 @@ llm-router-axi shadow report
   stderr. It keeps spendPriority rotation because it supplies no chain ranks.
 - `check` gates an explicit harness/model override on the same quota, pool,
   cooldown, runtime-health, and spawn-capacity paths as routing. A refusal exits
-  `1` with the frozen reason and next eligible policy candidate;
-  `--force-override` succeeds and appends a credential-free record under
+  `1` with the frozen reason and a next eligible policy candidate that also
+  passes machine capacity; `--force-override` succeeds and, only when the
+  override would otherwise have been refused, appends a credential-free record under
   `~/.local/state/llm-router-axi/override-audit.jsonl`.
 - `explain` shows each candidate (with its 1-based chain rank) and why it was
   accepted or rejected, reusing the firstmate selector's frozen rejection strings.

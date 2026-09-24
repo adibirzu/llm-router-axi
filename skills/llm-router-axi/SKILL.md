@@ -80,8 +80,9 @@ fallbacks[], capacity{ok,measured}`. `--json` emits the same decision as JSON;
 array) and prints one compact launch profile, so `fm-dispatch-select.mjs` can
 become a shim. `check` gates an explicit harness/model override on the same
 quota, pool, cooldown, runtime-health, and spawn-capacity paths; a refusal names
-the exact selector reason and next eligible candidate, while
-`--force-override` succeeds and appends a credential-free audit record under
+the exact selector reason and a next eligible candidate that also passes machine
+capacity, while `--force-override` succeeds and, only when the override would
+otherwise have been refused, appends a credential-free audit record under
 `~/.local/state/llm-router-axi/override-audit.jsonl`. `route chain` walks the policy `modelFallback` /
 `fallbackLanes` step-down, so `fm-model-fallback.sh` can read it. `capacity`
 reports the machine gauges (memory free percent, memory pressure, swap, agent
