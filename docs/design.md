@@ -238,6 +238,21 @@ reason` — plus the `selected` candidate and `capacity` verdict, so an operator
 can see why each candidate was accepted or dropped.
 Rejection reasons are the frozen selector strings, not new prose.
 
+### 3.3a `check` (explicit override gate)
+
+```
+check --harness <name> --model <id> [--force-override] [--json]
+```
+
+Resolves the override through its matching policy candidate group and applies
+the same selector and spawn-capacity paths as `route`/`select`. A dead override
+exits `1` with `OVERRIDE_REFUSED`, the selector's exact refusal reason, and the
+next eligible candidate in that group. `--force-override` exits `0` and appends
+a credential-free JSONL audit record under
+`~/.local/state/llm-router-axi/override-audit.jsonl`
+(`LLM_ROUTER_OVERRIDE_LOG` overrides the path for tests). Probing does not rotate
+least-recent-use state; telemetry-derived cooldown evidence is still persisted.
+
 ### 3.4 `record`
 
 ```

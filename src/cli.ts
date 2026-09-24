@@ -2,6 +2,7 @@ import { runAxiCli } from "axi-sdk-js";
 
 import { capacityCommand, CAPACITY_HELP } from "./commands/capacity.js";
 import { classifyCommand, CLASSIFY_HELP } from "./commands/classify.js";
+import { checkCommand, CHECK_HELP } from "./commands/check.js";
 import { doctorCommand, DOCTOR_HELP } from "./commands/doctor.js";
 import { explainCommand, EXPLAIN_HELP } from "./commands/explain.js";
 import { pickCommand, PICK_HELP } from "./commands/pick.js";
@@ -21,9 +22,9 @@ export { DESCRIPTION };
 
 const LANE_COUNT = 15;
 
-export const TOP_HELP = `usage: llm-router-axi <route|select|explain|capacity|policy|record|classify|doctor|triage|pick|shadow> [flags]
-commands[11]:
-  policy=<init|show|validate>, route, select, explain, capacity, record, classify, doctor, triage, pick, shadow
+export const TOP_HELP = `usage: llm-router-axi <route|select|check|explain|capacity|policy|record|classify|doctor|triage|pick|shadow> [flags]
+commands[12]:
+  policy=<init|show|validate>, route, select, check, explain, capacity, record, classify, doctor, triage, pick, shadow
   route chain=<harness step-down walk>
   shadow report=<read-only shadow ledger summary>
 flags[2]:
@@ -32,6 +33,7 @@ examples:
   llm-router-axi policy show
   llm-router-axi route --kind ship --difficulty medium --surface backend --flags
   llm-router-axi select '{"use":[{"harness":"claude"},{"harness":"codex"}]}' --quota-json usage.json
+  llm-router-axi check --harness codex --model gpt-5.6
   llm-router-axi route chain --harness opencode --model opencode-go/qwen3.8-flash
   llm-router-axi explain --kind review --difficulty hard --surface docs
   llm-router-axi capacity check
@@ -59,6 +61,7 @@ export async function main(options: MainOptions = {}): Promise<void> {
     commands: {
       route: (args) => routeCommand(args),
       select: (args) => selectCommand(args),
+      check: (args) => checkCommand(args),
       explain: (args) => explainCommand(args),
       capacity: (args) => capacityCommand(args),
       "classify-evidence": (args) => classifyCommand(args),
@@ -79,6 +82,8 @@ export async function main(options: MainOptions = {}): Promise<void> {
           return undefined;
         case "select":
           return SELECT_HELP;
+        case "check":
+          return CHECK_HELP;
         case "explain":
           return EXPLAIN_HELP;
         case "capacity":
