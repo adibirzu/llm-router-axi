@@ -129,7 +129,7 @@ export async function checkCommand(args: string[]): Promise<string> {
   const reason = requestedEvaluation.eligible
     ? (capacity.ok ? requestedEvaluation.detail : (capacity.reasons[0] ?? "route refused by machine capacity"))
     : requestedEvaluation.detail;
-  const nextIndex = evaluated.next?.selected
+  const nextIndex = capacity.ok && evaluated.next?.selected
     ? profiles.slice(1).indexOf(evaluated.next.selected)
     : -1;
   const next = nextIndex >= 0
@@ -144,7 +144,7 @@ export async function checkCommand(args: string[]): Promise<string> {
     next,
   };
 
-  if (forced) appendOverrideAudit(now, payload);
+  if (forced && !eligible) appendOverrideAudit(now, payload);
   if (!payload.allowed) process.exitCode = 1;
   const output: Record<string, unknown> = payload.allowed
     ? { ...payload }

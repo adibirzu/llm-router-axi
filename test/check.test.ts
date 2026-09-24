@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -153,6 +153,42 @@ describe("check override gate", () => {
       model: "opencode-go/deepseek-v4.1-flash",
       reason: "window rolling headroom 0% is at or below 20% reserve",
     });
+  });
+
+  it("does not audit a force-override when the override was healthy", async () => {
+    const usage = usageFile([provider("opencode-go", 80), provider("codex", 75)]);
+    const result = await run([
+      "check", "--harness", "opencode", "--model", "opencode-go/deepseek-v4.1-flash",
+      "--usage-json", usage, "--now", "1000", "--force-override", "--json",
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.output)).toMatchObject({ allowed: true, forced: true });
+    expect(existsSync(process.env.LLM_ROUTER_OVERRIDE_LOG as string)).toBe(false);
+  });
+
+  it("suggests no next candidate when machine capacity alone refuses", async () => {
+    const machine = join(dir, "machine.json");
+    const healthy = JSON.parse(readFileSync(process.env.LLM_ROUTER_MACHINE_JSON as string, "utf8")) as Record<string, unknown>;
+    writeFileSync(machine, JSON.stringify({ ...healthy, agents: 999 }));
+    const savedMachine = process.env.LLM_ROUTER_MACHINE_JSON;
+    process.env.LLM_ROUTER_MACHINE_JSON = machine;
+    try {
+      const usage = usageFile([provider("opencode-go", 80), provider("codex", 75)]);
+      const args = [
+        "check", "--harness", "opencode", "--model", "opencode-go/deepseek-v4.1-flash",
+        "--usage-json", usage, "--now", "1000", "--json",
+      ];
+      const refused = await run(args);
+      expect(refused.exitCode).toBe(1);
+      expect(JSON.parse(refused.output)).toMatchObject({ code: "OVERRIDE_REFUSED", next: null });
+
+      const forced = await run([...args, "--force-override"]);
+      expect(forced.exitCode).toBe(0);
+      expect(JSON.parse(forced.output)).toMatchObject({ allowed: true, forced: true, next: null });
+      expect(readFileSync(process.env.LLM_ROUTER_OVERRIDE_LOG as string, "utf8").trim().split("\n")).toHaveLength(1);
+    } finally {
+      process.env.LLM_ROUTER_MACHINE_JSON = savedMachine;
+    }
   });
 
   it("does not change ordinary route output", async () => {
