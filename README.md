@@ -11,7 +11,7 @@ route --kind ship --difficulty medium --surface backend
 ```
 
 > **Status: implementation (P2c).** The policy schema/validator are live, and
-> `route`, `select`, `route chain`, `explain`, `record`, and `capacity` are
+> `route`, `select`, `check`, `route chain`, `explain`, `record`, and `capacity` are
 > implemented. Eligibility, the frozen rejection strings, and `select`'s
 > spendPriority rotation reproduce the firstmate `fm-dispatch-select.mjs` selector
 > on its 14 fixtures. `route` ranks by the lane's declared chain order: the
@@ -67,6 +67,7 @@ time, `memoryFreeReservePercent` **10** (the captain's Mac rests at 13–22% fre
 llm-router-axi route --kind ship --difficulty medium --surface backend [--flags]
 llm-router-axi route chain --harness opencode --model opencode-go/qwen3.8-flash
 llm-router-axi select --json '<profile or rule>'
+llm-router-axi check --harness opencode --model opencode-go/qwen3.8-flash
 llm-router-axi explain --kind review --difficulty hard --surface docs
 llm-router-axi record --provider cursor --outcome rate_limit --task t-42
 llm-router-axi capacity check
@@ -89,6 +90,12 @@ llm-router-axi shadow report
   `fm-dispatch-select.mjs` input (a profile, a `{use:[...]}` rule, or a profile
   array) and emits the one compact launch profile, with the frozen diagnostics on
   stderr. It keeps spendPriority rotation because it supplies no chain ranks.
+- `check` gates an explicit harness/model override on the same quota, pool,
+  cooldown, runtime-health, and spawn-capacity paths as routing. A refusal exits
+  `1` with the frozen reason and a next eligible policy candidate that also
+  passes machine capacity; `--force-override` succeeds and, only when the
+  override would otherwise have been refused, appends a credential-free record under
+  `~/.local/state/llm-router-axi/override-audit.jsonl`.
 - `explain` shows each candidate (with its 1-based chain rank) and why it was
   accepted or rejected, reusing the firstmate selector's frozen rejection strings.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
