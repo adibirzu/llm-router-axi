@@ -163,6 +163,13 @@ export const POLICY_SCHEMA = {
             default: { enum: ["opencode-go", "opencode"] },
             go: { type: "string", minLength: 1 },
             free: { type: "string", minLength: 1 },
+            goWindows: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string", minLength: 1 },
+              description:
+                "Window ids the paid Go pool is priced on (quota-axi cannot claim the opencode-go windows jointly bind, so the doctrine names them, as agy gemini does).",
+            },
           },
         },
       },

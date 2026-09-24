@@ -90,7 +90,21 @@ export interface PoolSettings {
     gemini: string[];
     nonGemini: string[];
   };
-  opencode: { default: "opencode-go" | "opencode"; go: string; free: string };
+  opencode: {
+    default: "opencode-go" | "opencode";
+    go: string;
+    free: string;
+    /**
+     * Window ids the paid Go pool is priced on. quota-axi reports the
+     * `opencode-go` row with unknown joint semantics (it cannot claim the
+     * rolling, weekly, and monthly windows jointly bind every model), so the
+     * doctrine names the allowance windows explicitly — the same way agy's
+     * `gemini` names its two windows — instead of min-pricing every live
+     * window. Optional for a policy file written before the quota-axi row
+     * existed; without it the Go pool falls back to every live window.
+     */
+    goWindows?: string[];
+  };
 }
 
 export interface SpendPrioritySettings {

@@ -135,7 +135,7 @@ OpenUsage showed Auto at ~99%). `pools` fixes the window ids by name:
 |---|---|---|
 | cursor | `auto_usage` | `auto_usage` vs `api_usage` |
 | agy | `gemini` | `gemini_5h` + `gemini_weekly` vs `claude_gpt_5h` + `claude_gpt_weekly` |
-| opencode | `opencode-go` | `opencode-go` (paid Go) vs `opencode` (free Zen) |
+| opencode | `opencode-go` | `opencode-go` (paid Go, telemetry row `opencode-go`, priced on `goWindows`) vs `opencode` (free Zen) |
 
 A candidate's `pool` names which one it draws on, so the router prices the
 declared pool instead of a provider-wide minimum.
@@ -176,9 +176,9 @@ decision:
   harness: opencode
   model: opencode-go/deepseek-v4.1-flash
   effort: medium
-  provider: opencode
+  provider: opencode-go
   pool: opencode-go
-  reason: "fresh window weekly headroom=93% reserve=20%"
+  reason: "fresh window weekly headroom=51% reserve=20%"
   fallbacks[]: {harness, model, effort, provider, pool}
   capacity: {ok: true, measured: {...}, reasons: []}
 ```
@@ -197,18 +197,24 @@ among candidates that share a chain rank. `select` does not supply ranks, so it
 keeps the fork's spendPriority ranking.
 
 **Provider identity** is resolved here, not by the caller. `claude`, `codex`,
-`grok`, `cursor`, and `agy` map to the same-named usage-axi provider; `opencode`
-maps to provider `opencode` with pool `opencode-go` or `opencode` chosen from
-the model prefix (`opencode-go/` vs `opencode/`); `copilot` and `cline` are
+`grok`, `cursor`, and `agy` map to the same-named usage-axi provider; an
+`opencode` Go-pool candidate (pool `opencode-go` or an `opencode-go/` model
+prefix) maps to the live `opencode-go` row quota-axi publishes, falling back
+to the legacy `opencode` row when only OpenUsage reports the subscription;
+anything else keeps provider `opencode`, so the free pool still fails closed
+when it has no telemetry of its own. `copilot` and `cline` are
 routable when usage-axi carries their windows. The selector's fixed
 five-provider set is deliberately **not** carried forward.
 
 **Pool pricing** uses the candidate's declared pool (policy `pools` plus
 `pool`/`quotaWindow`): cursor `auto_usage`/`api_usage`, agy
 `gemini_5h`+`gemini_weekly` vs `claude_gpt_5h`+`claude_gpt_weekly`, opencode Go
-vs free. A candidate with no declared pool keeps the conservative provider-wide
-minimum. A declared window absent from telemetry fails closed; it is never
-repriced on a healthier window.
+(`pools.opencode.goWindows`, the allowance windows quota-axi cannot claim
+jointly bind) vs free. A candidate with no declared pool keeps the
+conservative provider-wide minimum. A declared window absent from telemetry
+fails closed; it is never repriced on a healthier window. A policy file
+written before `goWindows` existed prices the Go pool on every live window,
+so adopting the new default (or `policy init`) is the migration.
 
 **Capacity** folds `usage-axi machine{agents, agentCeiling, loadPerCore,
 memoryFreePct, suiteSlotFree}` over the local gauges
@@ -243,7 +249,9 @@ cooldown and update its least-recent-use ledger under
 `~/.local/state/llm-router-axi` (XDG-aware; `LLM_ROUTER_STATE_FILE` overrides
 the exact file for tests). Output is a receipt
 (`provider, outcome, task, cooldownUntil?, statePath`). `rate_limit` parks the
-provider; `ok` clears the cooldown. Selection writes the least-recent-use
+provider; `ok` clears the cooldown. `opencode` and `opencode-go` share one
+cooldown: a record under either spelling gates, and an `ok` under either
+clears, both (`cooldownKeys` in `src/selector.ts`). Selection writes the least-recent-use
 ledger; both persist across invocations.
 
 ### 3.5 `select` (arbitrary-profile compatibility)

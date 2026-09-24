@@ -4,7 +4,7 @@ import { parseArgs, requireEnum, requireInteger, type FlagSpec } from "../args.j
 import { appendLedgerRow, JEV_FREEZE } from "../jev/shadow.js";
 import { loadEffectivePolicy } from "../policy/index.js";
 import { collapseHome, helpBlock, toon } from "../render.js";
-import { setCooldown } from "../selector.js";
+import { cooldownKeys, setCooldown } from "../selector.js";
 import { dispatchStatePath, loadState, saveState, withStateLock } from "../state.js";
 
 const OUTCOME_VALUES = ["rate_limit", "ok"] as const;
@@ -26,7 +26,7 @@ description: Record a provider outcome so the router applies a cooldown.
   The outcome is also appended to the Jev shadow ledger for later
   agreement analysis. ${JEV_FREEZE}
 inputs:
-  --provider <name>          provider id from usage-axi (claude, cursor, opencode, ...)
+  --provider <name>          provider id from usage-axi (claude, cursor, opencode-go, ...)
   --outcome <rate_limit|ok>  a verified rate-limit/quota failure, or a clean success
   --task <id>                task id for the receipt
   --now <epoch>              fix the current epoch second (test seam)
@@ -103,7 +103,7 @@ export async function recordCommand(args: string[]): Promise<string> {
         statePath: collapseHome(statePath),
       };
     }
-    delete state.cooldowns[provider as string];
+    for (const key of cooldownKeys(provider as string)) delete state.cooldowns[key];
     saveState(state);
     return {
       provider,
