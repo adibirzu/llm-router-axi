@@ -11,7 +11,7 @@ description: >
 
 Policy-driven LLM router: task descriptor plus live usage in, one harness/model/effort decision out.
 
-Status: **P2 implementation.** `route`, `select`, `explain`, `capacity`, and
+Status: **P2 implementation.** `route`, `select`, `check`, `explain`, `capacity`, and
 `record` are live. Eligibility and diagnostics reproduce the firstmate
 `fm-dispatch-select.mjs` selector on its 14 fixtures. `route` ranks by the
 lane's declared chain order (headroom/spendPriority only break same-rank ties);
@@ -56,6 +56,7 @@ The same file carries the in-run step-down doctrine under `modelFallback`
 ```sh
 npx -y llm-router-axi route --kind ship --difficulty medium --surface backend [--flags] [--json]
 npx -y llm-router-axi select --quota-json usage.json '[{"harness":"claude"},{"harness":"codex"}]'
+npx -y llm-router-axi check --harness opencode --model opencode-go/qwen3.8-flash
 npx -y llm-router-axi route chain --harness opencode --model opencode-go/qwen3.8-flash
 npx -y llm-router-axi explain --kind review --difficulty hard --surface docs
 npx -y llm-router-axi capacity check
@@ -77,7 +78,12 @@ fallbacks[], capacity{ok,measured}`. `--json` emits the same decision as JSON;
 `select` accepts firstmate's rule/profile-array input shape
 (`harness/provider/model/effort/quotaWindow`, a `{use:[...]}` rule, or an
 array) and prints one compact launch profile, so `fm-dispatch-select.mjs` can
-become a shim. `route chain` walks the policy `modelFallback` /
+become a shim. `check` gates an explicit harness/model override on the same
+quota, pool, cooldown, runtime-health, and spawn-capacity paths; a refusal names
+the exact selector reason and a next eligible candidate that also passes machine
+capacity, while `--force-override` succeeds and, only when the override would
+otherwise have been refused, appends a credential-free audit record under
+`~/.local/state/llm-router-axi/override-audit.jsonl`. `route chain` walks the policy `modelFallback` /
 `fallbackLanes` step-down, so `fm-model-fallback.sh` can read it. `capacity`
 reports the machine gauges (memory free percent, memory pressure, swap, agent
 count, load, suite slot, llama.cpp parallel slots busy/total) against the
