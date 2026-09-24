@@ -119,7 +119,7 @@ export async function checkCommand(args: string[]): Promise<string> {
           ranks: alternatives.map((_, index) => index),
         })
       : undefined;
-    saveState(gatedState);
+saveState({ ...gatedState, cooldowns: evaluated.next?.state.cooldowns ?? gatedState.cooldowns });
     return { requested, next };
   });
 
