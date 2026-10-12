@@ -41,12 +41,20 @@ beforeEach(() => {
     XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME,
     LLM_ROUTER_USAGE_AXI: process.env.LLM_ROUTER_USAGE_AXI,
+    LLM_ROUTER_STATE_FILE: process.env.LLM_ROUTER_STATE_FILE,
+    LLM_ROUTER_USAGE_CACHE: process.env.LLM_ROUTER_USAGE_CACHE,
+    LLM_ROUTER_OVERRIDE_LOG: process.env.LLM_ROUTER_OVERRIDE_LOG,
   };
   process.exitCode = 0;
   dir = mkdtempSync(join(tmpdir(), "llm-router-usage-"));
   process.env.XDG_CONFIG_HOME = join(dir, "config");
   process.env.XDG_STATE_HOME = join(dir, "state");
   process.env.LLM_ROUTER_USAGE_AXI = join(dir, "missing-usage-axi");
+  // Fresh per-case router state so a caller-supplied (populated) state path is
+  // neither read nor mutated.
+  process.env.LLM_ROUTER_STATE_FILE = join(dir, "state", "dispatch.json");
+  process.env.LLM_ROUTER_USAGE_CACHE = join(dir, "state", "usage-cache.json");
+  process.env.LLM_ROUTER_OVERRIDE_LOG = join(dir, "state", "override-audit.jsonl");
 });
 
 afterEach(() => {

@@ -10,6 +10,7 @@ let dir: string;
 let savedExitCode: number | undefined;
 let savedConfigHome: string | undefined;
 let savedStateHome: string | undefined;
+let savedRouterEnv: Record<string, string | undefined>;
 
 async function run(argv: string[]): Promise<{ output: string; exitCode: number }> {
   process.exitCode = 0;
@@ -30,11 +31,22 @@ beforeEach(() => {
   savedExitCode = process.exitCode;
   savedConfigHome = process.env.XDG_CONFIG_HOME;
   savedStateHome = process.env.XDG_STATE_HOME;
+  savedRouterEnv = {
+    LLM_ROUTER_USAGE_AXI: process.env.LLM_ROUTER_USAGE_AXI,
+    LLM_ROUTER_STATE_FILE: process.env.LLM_ROUTER_STATE_FILE,
+    LLM_ROUTER_USAGE_CACHE: process.env.LLM_ROUTER_USAGE_CACHE,
+    LLM_ROUTER_OVERRIDE_LOG: process.env.LLM_ROUTER_OVERRIDE_LOG,
+  };
   process.exitCode = 0;
   dir = mkdtempSync(join(tmpdir(), "llm-router-axi-test-"));
   process.env.XDG_CONFIG_HOME = dir;
   process.env.XDG_STATE_HOME = join(dir, "state");
   process.env.LLM_ROUTER_USAGE_AXI = join(dir, "missing-usage-axi");
+  // Fresh per-case router state so a caller-supplied state path is neither
+  // read nor mutated.
+  process.env.LLM_ROUTER_STATE_FILE = join(dir, "state", "dispatch.json");
+  process.env.LLM_ROUTER_USAGE_CACHE = join(dir, "state", "usage-cache.json");
+  process.env.LLM_ROUTER_OVERRIDE_LOG = join(dir, "state", "override-audit.jsonl");
 });
 
 afterEach(() => {
@@ -49,7 +61,10 @@ afterEach(() => {
   } else {
     process.env.XDG_STATE_HOME = savedStateHome;
   }
-  delete process.env.LLM_ROUTER_USAGE_AXI;
+  for (const [key, value] of Object.entries(savedRouterEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
   rmSync(dir, { recursive: true, force: true });
 });
 
