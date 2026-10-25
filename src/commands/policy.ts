@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { AxiError } from "axi-sdk-js";
 
+import { suiteLimit } from "../capacity.js";
 import { parseArgs, type FlagSpec } from "../args.js";
 import {
   configPath,
@@ -208,6 +209,7 @@ function policyShow(args: string[]): string {
         maxFallbacks: policy.routing.maxFallbacks,
         agentCeiling: policy.capacity.agentCeiling,
         oneSuiteAtATime: policy.capacity.oneSuiteAtATime,
+        maxConcurrentSuites: suiteLimit(policy.capacity),
         memoryFreeReservePercent: policy.capacity.memoryFreeReservePercent,
         maxLoadPerCore: policy.capacity.maxLoadPerCore,
         cursorDefault: policy.pools.cursor.default,

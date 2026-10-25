@@ -55,7 +55,7 @@ Top-level keys (all required; unknown keys are refused):
 |---|---|
 | `version` | Schema version, currently `1`. |
 | `routing` | `reservePercent` (20), `cooldownSeconds` (1800), `telemetryMaxAgeSeconds` (300), `maxFallbacks` (4). |
-| `capacity` | `agentCeiling` (10), `oneSuiteAtATime` (true), `memoryFreeReservePercent` (**10**), `maxLoadPerCore` (2), `memoryPressureMax` (`warn`), `maxSwapUsedPercent` (`null`). |
+| `capacity` | `agentCeiling` (10), `oneSuiteAtATime` (true, legacy alias), `maxConcurrentSuites` (1), `memoryFreeReservePercent` (**10**), `maxLoadPerCore` (2), `memoryPressureMax` (`warn`), `maxSwapUsedPercent` (`null`). |
 | `pools` | Split-pool window ids: cursor `auto_usage`/`api_usage`, agy `gemini_5h`/`gemini_weekly` vs `claude_gpt_5h`/`claude_gpt_weekly`, opencode `opencode-go`/`opencode`. |
 | `spendPriority` | `weight`, `tieBreaker` (`least-recent-use` \| `declared-order`), `preferKnown`. |
 | `candidateGroups` | Named, ordered candidate lists. |
@@ -220,11 +220,18 @@ so adopting the new default (or `policy init`) is the migration.
 memoryFreePct, suiteSlotFree}` over the local gauges
 (`src/machine.ts`, ported from `fm-capacity-lib.sh`) against the policy
 thresholds: worker-root agent count, load per core, free-memory reserve, memory
-pressure level, optional swap ceiling, and the one-suite slot. The one-suite rule
-is an admission purpose, not a blanket refusal: a `spawn` verdict (the default,
-and the only one `route` uses) never refuses because a suite is running and keeps
-the slot as context, while a `suite` verdict (`capacity --for suite`) refuses when
-`oneSuiteAtATime` is true and the slot is occupied. `memoryFreePct`
+pressure level, optional swap ceiling, and the running test-suite count. The
+suite cap is an admission purpose, not a blanket refusal: a `spawn` verdict (the
+default, and the only one `route` uses) never refuses because a suite is running
+and keeps the count as context, while a `suite` verdict (`capacity --for suite`)
+refuses when the running suite count reaches `maxConcurrentSuites` (1-8, default
+1). The count is one per suite root: a test runner whose ancestor is also a test
+runner (`npm test` -> `sh -c vitest` -> `node vitest`) belongs to that run and is
+not counted twice. `oneSuiteAtATime` stays as a legacy alias that only applies
+when `maxConcurrentSuites` is absent (true is a cap of 1, false is no cap). This
+is a best-effort admission check that measures running suites without reserving a
+slot, so simultaneous starts can temporarily exceed the cap by the number of
+simultaneous starters. `memoryFreePct`
 for the captain's Mac rests at 13-22 percent, so the default reserve is **10**
 and `memoryPressureMax` defaults to `warn` (only `critical` refuses); a gauge
 that cannot be measured is reported but never refuses on its own.
@@ -291,11 +298,13 @@ come from the policy `routing` block, overridable by flag.
 
 ### 3.6 `capacity` and `classify-evidence`
 
-`capacity [check] [--for <spawn|suite>] [--json]` reports the machine gauges and
+`capacity [check] [--for <spawn|suite|local-llm>] [--json]` reports the machine gauges and
 the policy verdict. The default `spawn` purpose (what an agent spawn asks) never
-refuses on the suite slot; `--for suite` refuses when `oneSuiteAtATime` is true
-and the slot is occupied and `check`/`--for suite` exit `1` on a refusal. This is
-the surface `bin/fm-capacity.sh` and `fm-test-run.sh` shim onto in P3.
+refuses on running suites; `--for suite` refuses when the running suite count
+reaches `maxConcurrentSuites`; `--for local-llm` refuses when every llama.cpp
+parallel slot is busy; `check`, `--for suite`, and `--for local-llm` exit `1` on
+a refusal. This is the surface `bin/fm-capacity.sh` and `fm-test-run.sh` shim
+onto in P3.
 `classify-evidence [--file <path>]`
 exposes the shared depletion detector (stdin default) and prints
 `classification=none` or `classification=depleted` plus the matched signature.
@@ -431,7 +440,7 @@ implement it; `src/usage.ts` owns provider identity and pool pricing, and
 6. **Capacity verdict.** Fold in `usage-axi machine{}`: refuse when the fleet is
    at `agentCeiling`, when load per core exceeds `maxLoadPerCore`, or when memory
    free is under `memoryFreeReservePercent`. A `route` spawn admission also never
-   refuses on the suite slot; the `oneSuiteAtATime` refusal is confined to the
+   refuses on running suites; the `maxConcurrentSuites` refusal is confined to the
    `capacity --for suite` purpose. The verdict is `capacity{ok, measured}`.
 7. **Accounts.** Where several accounts exist, select the one the ledger marks
    least recently used (ported from `fm-accounts-lib.sh`).

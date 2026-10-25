@@ -22,7 +22,9 @@ import { spawnSync } from "node:child_process";
  *    collapses into that ancestor's root, and Cursor private-worker /
  *    worker-start daemons are excluded, so `agents` counts harness
  *    invocations, not matching processes.
- *  - suite slot: a running test runner in `ps args`.
+ *  - suite count: running test-suite roots in `ps args`. A test runner whose
+ *    ancestor is also a test runner (`npm test` -> `sh -c vitest` -> `node
+ *    vitest`) collapses into that ancestor, so one run counts once.
  *
  * Test/diagnostic seams (a MEASUREMENT, never a disable): the `LLM_ROUTER_*`
  * environment variables below, or a whole gauge fixture via
@@ -38,7 +40,10 @@ export interface MachineGauges {
   memoryPressure: MemoryPressureLevel;
   swapUsedPct: number | null;
   swapouts: number | null;
+  /** True when no test suite is running; legacy boolean view of `suiteCount`. */
   suiteSlotFree: boolean | null;
+  /** Running test-suite roots (one per run, not per child process). */
+  suiteCount?: number | null;
   /** Additive: the counted invocation roots behind `agents`, audit trail only. */
   roots?: AgentRoot[];
   /** Configured llama.cpp --parallel ceiling (adi1 qwen38fn). Default 2. */
@@ -343,18 +348,35 @@ export function countWorkerRoots(
   return readFleet(commSnapshot, argvSnapshot, excludePids).agents;
 }
 
-/** True when a test runner is live in the argv snapshot. Pure. */
-export function suiteSlotFromArgv(
+/**
+ * Count live test-suite roots over the two `ps` snapshots. A matching process
+ * whose ancestor also matches is a child of the same run and collapses into
+ * that ancestor, so `npm test` -> `sh -c vitest run` -> `node vitest` counts
+ * once. Without a comm snapshot there is no parent map, so each matching
+ * process counts on its own. Null when there is no argv snapshot. Pure.
+ */
+export function countSuiteRoots(
+  commSnapshot: string | null,
   argvSnapshot: string | null,
   excludePids: ReadonlySet<number> = new Set(),
-): boolean | null {
+): number | null {
   if (!argvSnapshot) return null;
+  const parent = new Map<number, number>();
+  for (const line of (commSnapshot ?? "").split("\n")) {
+    const parsed = parsePs(line);
+    if (parsed) parent.set(parsed.pid, parsed.ppid);
+  }
+  const matching = new Set<number>();
   for (const line of argvSnapshot.split("\n")) {
     const parsed = argvFrom(line);
     if (!parsed || excludePids.has(parsed.pid)) continue;
-    if (TEST_RUNNER_RE.test(parsed.args)) return false;
+    if (TEST_RUNNER_RE.test(parsed.args)) matching.add(parsed.pid);
   }
-  return true;
+  let roots = 0;
+  for (const pid of matching) {
+    if (!hasAncestorIn(pid, parent, matching)) roots += 1;
+  }
+  return roots;
 }
 
 function probeMemoryPressure(): MemoryPressureLevel {
@@ -491,6 +513,7 @@ export function readMachineFixture(): Partial<MachineGauges> | null {
     swapUsedPct: num("swapUsedPct"),
     swapouts: num("swapouts"),
     suiteSlotFree: typeof raw["suiteSlotFree"] === "boolean" ? (raw["suiteSlotFree"] as boolean) : null,
+    suiteCount: num("suiteCount"),
     llamaParallel: num("llamaParallel"),
     llamaSlotsTotal: num("llamaSlotsTotal"),
     llamaSlotsBusy: num("llamaSlotsBusy"),
@@ -626,6 +649,7 @@ export function measureMachine(): MachineGauges {
     memoryPressure: probeMemoryPressure(),
     ...probeSwapValues(),
     suiteSlotFree: envBool("LLM_ROUTER_SUITE_SLOT") ?? null,
+    suiteCount: envNumber("LLM_ROUTER_SUITE_COUNT") ?? null,
     llamaParallel: llama.llamaParallel,
     llamaSlotsTotal: llama.llamaSlotsTotal,
     llamaSlotsBusy: llama.llamaSlotsBusy,
@@ -640,9 +664,16 @@ export function measureMachine(): MachineGauges {
     const fleet = readFleet(comm, argv, exclude);
     measured.agents = fleet.agents;
     measured.roots = fleet.roots;
-    if (measured.suiteSlotFree === null) measured.suiteSlotFree = suiteSlotFromArgv(argv, exclude);
+    if (measured.suiteCount === null && measured.suiteSlotFree === null) {
+      measured.suiteCount = countSuiteRoots(comm, argv, exclude);
+      measured.suiteSlotFree = measured.suiteCount === null ? null : measured.suiteCount === 0;
+    }
   }
-  return fixture ? { ...measured, ...stripNulls(fixture) } : measured;
+  if (!fixture) return measured;
+  // A fixture written before `suiteCount` pins only the boolean; it must not
+  // inherit the live count (the test runner running this very suite).
+  if (fixture.suiteSlotFree != null && fixture.suiteCount == null) measured.suiteCount = null;
+  return { ...measured, ...stripNulls(fixture) };
 }
 
 function probeSwapValues(): { swapUsedPct: number | null; swapouts: number | null } {
