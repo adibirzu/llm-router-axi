@@ -109,6 +109,9 @@ llm-router-axi shadow report
   the count is one per suite run, not per child worker, and `capacity` reports
   both the count and the limit; the legacy `oneSuiteAtATime` means 1 when true
   and no cap when false, and only applies when `maxConcurrentSuites` is absent);
+  this is a best-effort admission check that measures running suites without
+  reserving a slot, so simultaneous starts can temporarily exceed the cap by
+  the number of simultaneous starters;
   `--for local-llm` is the gate a local-Qwen
   agent launch calls, and refuses when every configured `capacity.llamaParallel`
   slot is busy. `check`, `--for suite`, and `--for local-llm` exit `1` when the

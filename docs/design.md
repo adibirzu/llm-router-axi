@@ -228,7 +228,10 @@ refuses when the running suite count reaches `maxConcurrentSuites` (1-8, default
 1). The count is one per suite root: a test runner whose ancestor is also a test
 runner (`npm test` -> `sh -c vitest` -> `node vitest`) belongs to that run and is
 not counted twice. `oneSuiteAtATime` stays as a legacy alias that only applies
-when `maxConcurrentSuites` is absent (true is a cap of 1, false is no cap). `memoryFreePct`
+when `maxConcurrentSuites` is absent (true is a cap of 1, false is no cap). This
+is a best-effort admission check that measures running suites without reserving a
+slot, so simultaneous starts can temporarily exceed the cap by the number of
+simultaneous starters. `memoryFreePct`
 for the captain's Mac rests at 13-22 percent, so the default reserve is **10**
 and `memoryPressureMax` defaults to `warn` (only `critical` refuses); a gauge
 that cannot be measured is reported but never refuses on its own.
