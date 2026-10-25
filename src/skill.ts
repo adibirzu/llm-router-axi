@@ -60,7 +60,8 @@ The same file carries the in-run step-down doctrine under \`modelFallback\`
 \`modelFallbackCycles\`, using the exact keys firstmate's
 \`config/crew-dispatch.json\` uses. It also carries the \`capacity\` thresholds
 (\`memoryFreeReservePercent\` 10, \`memoryPressureMax\`, \`maxSwapUsedPercent\`,
-\`agentCeiling\`, \`maxLoadPerCore\`, \`oneSuiteAtATime\`, \`llamaParallel\`).
+\`agentCeiling\`, \`maxLoadPerCore\`, \`maxConcurrentSuites\`, \`oneSuiteAtATime\`,
+\`llamaParallel\`).
 
 ## Commands
 
@@ -97,11 +98,14 @@ otherwise have been refused, appends a credential-free audit record under
 \`${STATE_PATH}/override-audit.jsonl\`. \`route chain\` walks the policy \`modelFallback\` /
 \`fallbackLanes\` step-down, so \`fm-model-fallback.sh\` can read it. \`capacity\`
 reports the machine gauges (memory free percent, memory pressure, swap, agent
-count, load, suite slot, llama.cpp parallel slots busy/total) against the
+count, load, running test suites, llama.cpp parallel slots busy/total) against the
 policy thresholds. Spawn admission (the default, and the only thing \`route\`
 uses) never refuses because a test suite is running or a llama slot is busy;
-\`capacity --for suite\` is the gate a suite start calls, and it refuses when
-\`oneSuiteAtATime\` is true and the slot is occupied; \`capacity --for local-llm\`
+\`capacity --for suite\` is the gate a suite start calls, and it refuses when the
+running suite count (one per run, not per child process) reaches
+\`maxConcurrentSuites\` (default 1; the legacy \`oneSuiteAtATime\` true means 1,
+false means no cap, and \`maxConcurrentSuites\` wins when both are set);
+\`capacity --for local-llm\`
 is the gate a local-Qwen agent launch on adi1 calls, and it refuses when every
 configured \`llamaParallel\` slot is busy (probed from
 \`LLM_ROUTER_LLAMA_SLOTS_URL\`, default the adi1 llama.cpp \`/slots\` endpoint).

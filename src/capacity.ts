@@ -10,10 +10,11 @@ export interface CapacityVerdict {
 
 /**
  * What the verdict is admitting. A `spawn` (agent launch) is never refused
- * because a test suite is running: the suite slot is context, because the
- * one-suite rule serializes suite *starts*, not agent spawns. A `suite` start
- * gates on the slot, so `fm-test-run.sh` can call `capacity --for suite` before
- * it takes the flock. `local-llm` gates a local-Qwen agent launch on the
+ * because a test suite is running: the suite count is context, because the
+ * suite cap admits suite *starts*, not agent spawns. A `suite` start gates on
+ * the configured suite limit, so `fm-test-run.sh` can call
+ * `capacity --for suite` before it takes the flock. `local-llm` gates a
+ * local-Qwen agent launch on the
  * llama.cpp `--parallel` slot pool instead of the fleet-wide agent ceiling.
  */
 export type CapacityPurpose = "spawn" | "suite" | "local-llm";
@@ -32,10 +33,10 @@ const PRESSURE_RANK: Record<"normal" | "warn" | "critical", number> = {
  * Unlike the fork's spawn guard, an unreadable gauge never refuses: a route is
  * not a spawn admission, and refusing on an absent probe would make routing
  * fragile. The binding floors (`agentCeiling`, `memoryFreeReservePercent`,
- * `maxLoadPerCore`, `oneSuiteAtATime`) still fail closed, and the new
+ * `maxLoadPerCore`, `maxConcurrentSuites`) still fail closed, and the new
  * `memoryPressureMax` / `maxSwapUsedPercent` gates refuse when measured.
- * `oneSuiteAtATime` fails closed only for the `suite` purpose; a `spawn` keeps
- * the slot visible in `measured` but never refuses on it.
+ * The suite cap refuses only for the `suite` purpose; a `spawn` keeps the
+ * running count visible in `measured` but never refuses on it.
  */
 export function capacityVerdict(
   policy: Policy,
@@ -61,12 +62,36 @@ export function mergeGauges(
     swapUsedPct: machine?.swapUsedPct ?? probe.swapUsedPct,
     swapouts: machine?.swapouts ?? probe.swapouts,
     suiteSlotFree: machine?.suiteSlotFree ?? probe.suiteSlotFree,
+    suiteCount: machine?.suiteCount ?? probe.suiteCount ?? null,
     llamaParallel: machine?.llamaParallel ?? probe.llamaParallel,
     llamaSlotsTotal: machine?.llamaSlotsTotal ?? probe.llamaSlotsTotal,
     llamaSlotsBusy: machine?.llamaSlotsBusy ?? probe.llamaSlotsBusy,
     llamaSlotFree: machine?.llamaSlotFree ?? probe.llamaSlotFree,
     roots: probe.roots,
   };
+}
+
+/**
+ * How many test suites may run at once: `maxConcurrentSuites` when set, else
+ * the legacy `oneSuiteAtATime` alias (true is a cap of 1, false is no cap).
+ * `null` means uncapped.
+ */
+export function suiteLimit(settings: Policy["capacity"]): number | null {
+  if (typeof settings.maxConcurrentSuites === "number") return settings.maxConcurrentSuites;
+  return settings.oneSuiteAtATime ? 1 : null;
+}
+
+/**
+ * Running suites as the gauges report them. A measured `suiteCount` wins, but
+ * an occupied legacy `suiteSlotFree: false` (usage-axi, older fixtures) is at
+ * least one suite, so the larger of the two readings is used. Null when
+ * neither is readable.
+ */
+export function runningSuites(gauges: MachineGauges): number | null {
+  const counted = typeof gauges.suiteCount === "number" ? gauges.suiteCount : null;
+  const implied = gauges.suiteSlotFree === false ? 1 : gauges.suiteSlotFree === true ? 0 : null;
+  if (counted === null) return implied;
+  return implied === null ? counted : Math.max(counted, implied);
 }
 
 /** Evaluate a fixed set of gauges against the policy; pure and testable. */
@@ -92,6 +117,8 @@ export function evaluateGauges(
     llamaSlotsBusy,
     llamaSlotFree,
   } = gauges;
+  const suiteMax = suiteLimit(settings);
+  const suites = runningSuites(gauges);
 
   if (typeof agents === "number" && agents >= settings.agentCeiling) {
     reasons.push(`fleet is at or above the ${settings.agentCeiling}-agent ceiling (agents=${agents})`);
@@ -122,8 +149,8 @@ export function evaluateGauges(
       `swap in use ${swapUsedPct}% exceeds the ${maxSwapUsedPercent}% ceiling`,
     );
   }
-  if (purpose === "suite" && settings.oneSuiteAtATime && suiteSlotFree === false) {
-    reasons.push("the one-suite-at-a-time slot is occupied");
+  if (purpose === "suite" && suiteMax !== null && suites !== null && suites >= suiteMax) {
+    reasons.push(`the test-suite slots are full (${suites} running, limit ${suiteMax})`);
   }
   // local-llm purpose: refuse when every llama.cpp parallel slot is busy.
   // Unreadable probes never refuse (same doctrine as other gauges).
@@ -150,13 +177,15 @@ export function evaluateGauges(
       swapouts: gauges.swapouts,
       maxSwapUsedPercent,
       suiteSlotFree,
+      suiteCount: suites,
+      maxConcurrentSuites: suiteMax,
       oneSuiteAtATime: settings.oneSuiteAtATime,
       llamaParallel: llamaParallel ?? settings.llamaParallel ?? 2,
       llamaSlotsTotal,
       llamaSlotsBusy,
       llamaSlotFree,
       purpose,
-      suiteSlotEnforced: purpose === "suite" && settings.oneSuiteAtATime,
+      suiteSlotEnforced: purpose === "suite" && suiteMax !== null,
       llamaSlotEnforced: purpose === "local-llm",
     },
     reasons,

@@ -1,5 +1,6 @@
 import { runAxiCli } from "axi-sdk-js";
 
+import { suiteLimit } from "./capacity.js";
 import { capacityCommand, CAPACITY_HELP } from "./commands/capacity.js";
 import { classifyCommand, CLASSIFY_HELP } from "./commands/classify.js";
 import { checkCommand, CHECK_HELP } from "./commands/check.js";
@@ -152,6 +153,7 @@ function homeView(): string {
         telemetryMaxAgeSeconds: policy.routing.telemetryMaxAgeSeconds,
         agentCeiling: policy.capacity.agentCeiling,
         oneSuiteAtATime: policy.capacity.oneSuiteAtATime,
+        maxConcurrentSuites: suiteLimit(policy.capacity),
       },
     },
     helpBlock([

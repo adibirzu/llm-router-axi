@@ -76,6 +76,8 @@ export interface MachineTelemetry {
   loadPerCore?: number | null;
   memoryFreePct?: number | null;
   suiteSlotFree?: boolean | null;
+  /** Additive: running test-suite roots, when a usage-axi carries the count. */
+  suiteCount?: number | null;
   /**
    * Additive gauges a future usage-axi may carry (the router otherwise reads
    * them from local probes). `memoryPressure` is normal|warn|critical.

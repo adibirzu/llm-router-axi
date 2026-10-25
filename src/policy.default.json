@@ -10,6 +10,7 @@
   "capacity": {
     "agentCeiling": 10,
     "oneSuiteAtATime": true,
+    "maxConcurrentSuites": 1,
     "memoryFreeReservePercent": 10,
     "maxLoadPerCore": 2,
     "memoryPressureMax": "warn",

@@ -1,6 +1,6 @@
 import { AxiError } from "axi-sdk-js";
 
-import { evaluateGauges, type CapacityPurpose } from "../capacity.js";
+import { evaluateGauges, runningSuites, suiteLimit, type CapacityPurpose } from "../capacity.js";
 import { measureMachine, type MachineGauges } from "../machine.js";
 import { parseArgs, requireEnum, type FlagSpec } from "../args.js";
 import { loadEffectivePolicy } from "../policy/index.js";
@@ -13,7 +13,7 @@ const CAPACITY_FLAGS: FlagSpec[] = [
     name: "--for",
     value: "spawn|suite|local-llm",
     description:
-      "Admission purpose: spawn (default) never refuses on the suite slot; suite refuses when oneSuiteAtATime is true and it is occupied; local-llm refuses when every llama.cpp parallel slot is busy",
+      "Admission purpose: spawn (default) never refuses on running suites; suite refuses when maxConcurrentSuites suites are already running; local-llm refuses when every llama.cpp parallel slot is busy",
   },
 ];
 
@@ -24,24 +24,25 @@ description:
   Three admission purposes share one verdict:
     spawn (default)  gate an agent launch; the suite slot and llama slots are
                      context only.
-    suite            gate a test-suite start; refuses when oneSuiteAtATime is
-                     true and the slot is occupied. This is what fm-test-run.sh
-                     calls before starting a suite.
+    suite            gate a test-suite start; refuses when the running suite
+                     count reaches maxConcurrentSuites (legacy oneSuiteAtATime
+                     true is a limit of 1, false is no limit). This is what
+                     fm-test-run.sh calls before starting a suite.
     local-llm        gate a local-Qwen agent launch on adi1; refuses when every
                      llama.cpp --parallel slot (LLM_ROUTER_LLAMA_SLOTS_URL,
                      default the adi1 /slots endpoint) is busy.
   check exits 1 when the selected purpose has no headroom; a bare spawn report
   exits 0.
 gauges: free memory percent, memory pressure level, swap in use, worker-root
-        agent count, load per core, one-suite-at-a-time slot, llama.cpp
-        parallel slots busy/total. Each counted worker-root agent is listed
+        agent count, load per core, running test suites against
+        maxConcurrentSuites, llama.cpp parallel slots busy/total. Each counted worker-root agent is listed
         in roots[] (pid, comm, matched adapter, via) so the count is auditable.
 inputs:
   check                         verify only; exit 1 when the selected purpose
                                 would refuse
   --for <spawn|suite|local-llm>  admission purpose; spawn (default) ignores
-                                the suite slot and llama slots for refusal;
-                                suite enforces oneSuiteAtATime; local-llm
+                                running suites and llama slots for refusal;
+                                suite enforces maxConcurrentSuites; local-llm
                                 refuses when every llama.cpp parallel slot
                                 is busy
   --json                        emit {ok, measured, reasons, signals[], roots[]}
@@ -117,11 +118,9 @@ function signalRows(
   const settings = policy.capacity;
   const status = (reasonNeedle: string): string =>
     verdict.reasons.some((reason) => reason.includes(reasonNeedle)) ? "OVER" : "ok";
-  const slotMeasurement = (): string => {
-    if (gauges.suiteSlotFree === null) return "unknown";
-    return gauges.suiteSlotFree ? "free" : "occupied";
-  };
-  const suiteEnforced = settings.oneSuiteAtATime && purpose === "suite";
+  const suites = runningSuites(gauges);
+  const suiteMax = suiteLimit(settings);
+  const suiteEnforced = suiteMax !== null && purpose === "suite";
   return [
     {
       signal: "memory free",
@@ -160,14 +159,15 @@ function signalRows(
       verdict: status("load per core"),
     },
     {
-      signal: "suite slot",
-      measured: slotMeasurement(),
-      wanted: !settings.oneSuiteAtATime
-        ? "not checked"
-        : purpose === "suite"
-          ? "free"
-          : "free (context for spawn)",
-      verdict: suiteEnforced ? status("one-suite") : "context",
+      signal: "test suites",
+      measured: suites === null ? "unknown" : `${suites} running`,
+      wanted:
+        suiteMax === null
+          ? "not checked"
+          : purpose === "suite"
+            ? `under ${suiteMax}`
+            : `under ${suiteMax} (context for spawn)`,
+      verdict: suiteEnforced ? status("test-suite slots") : "context",
     },
     {
       signal: "llama slots",

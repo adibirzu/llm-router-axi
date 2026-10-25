@@ -4,8 +4,9 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { evaluateGauges, mergeGauges } from "../src/capacity.js";
+import { evaluateGauges, mergeGauges, runningSuites, suiteLimit } from "../src/capacity.js";
 import {
+  countSuiteRoots,
   countWorkerRoots,
   foldLlamaSlots,
   llamaParallelCeiling,
@@ -13,7 +14,6 @@ import {
   pressureFromLevel,
   pressureFromPsiAvg10,
   pressureFromText,
-  suiteSlotFromArgv,
   swapPercent,
   type MachineGauges,
 } from "../src/machine.js";
@@ -34,6 +34,7 @@ function gauges(overrides: Partial<MachineGauges> = {}): MachineGauges {
     swapUsedPct: 5,
     swapouts: 0,
     suiteSlotFree: true,
+    suiteCount: 0,
     llamaParallel: 2,
     llamaSlotsTotal: 2,
     llamaSlotsBusy: 0,
@@ -97,7 +98,7 @@ describe("capacity doctrine", () => {
 
   it("keeps the occupied suite slot as spawn context but refuses a suite start", () => {
     const policy = cloneDefault();
-    const occupied = gauges({ suiteSlotFree: false });
+    const occupied = gauges({ suiteSlotFree: false, suiteCount: 1 });
     const spawn = evaluateGauges(policy, occupied);
     expect(spawn.ok).toBe(true);
     expect(spawn.reasons).toHaveLength(0);
@@ -105,7 +106,7 @@ describe("capacity doctrine", () => {
 
     const suite = evaluateGauges(policy, occupied, "suite");
     expect(suite.ok).toBe(false);
-    expect(suite.reasons.join(" ")).toContain("one-suite-at-a-time slot is occupied");
+    expect(suite.reasons.join(" ")).toContain("test-suite slots are full (1 running, limit 1)");
     expect(suite.measured).toMatchObject({ purpose: "suite", suiteSlotEnforced: true });
   });
 
@@ -116,7 +117,88 @@ describe("capacity doctrine", () => {
 
     const off = cloneDefault();
     off.capacity.oneSuiteAtATime = false;
-    expect(evaluateGauges(off, gauges({ suiteSlotFree: false }), "suite").ok).toBe(true);
+    delete off.capacity.maxConcurrentSuites;
+    expect(evaluateGauges(off, gauges({ suiteSlotFree: false, suiteCount: 4 }), "suite").ok).toBe(true);
+  });
+
+  describe("maxConcurrentSuites", () => {
+    function withLimit(limit: number): Policy {
+      const policy = cloneDefault();
+      policy.capacity.maxConcurrentSuites = limit;
+      return policy;
+    }
+
+    it("admits a suite start below the limit and refuses at and above it", () => {
+      const policy = withLimit(3);
+      for (const running of [0, 1, 2]) {
+        const verdict = evaluateGauges(policy, gauges({ suiteCount: running, suiteSlotFree: running === 0 }), "suite");
+        expect(verdict.ok).toBe(true);
+        expect(verdict.measured).toMatchObject({ suiteCount: running, maxConcurrentSuites: 3 });
+      }
+      for (const running of [3, 4]) {
+        const verdict = evaluateGauges(policy, gauges({ suiteCount: running, suiteSlotFree: false }), "suite");
+        expect(verdict.ok).toBe(false);
+        expect(verdict.reasons.join(" ")).toContain(`(${running} running, limit 3)`);
+        expect(verdict.measured).toMatchObject({ suiteCount: running, maxConcurrentSuites: 3, suiteSlotEnforced: true });
+      }
+    });
+
+    it("never refuses a spawn or a local-llm start on running suites", () => {
+      const busy = gauges({ suiteCount: 5, suiteSlotFree: false });
+      expect(evaluateGauges(withLimit(3), busy).ok).toBe(true);
+      expect(evaluateGauges(withLimit(3), busy, "local-llm").ok).toBe(true);
+      expect(evaluateGauges(withLimit(3), busy).measured).toMatchObject({ suiteCount: 5, suiteSlotEnforced: false });
+    });
+
+    it("does not refuse when the running count is unreadable", () => {
+      const unknown = gauges({ suiteCount: null, suiteSlotFree: null });
+      expect(runningSuites(unknown)).toBeNull();
+      expect(evaluateGauges(withLimit(1), unknown, "suite").ok).toBe(true);
+    });
+
+    it("treats an occupied legacy suiteSlotFree reading as at least one suite", () => {
+      const legacyBusy = gauges({ suiteCount: null, suiteSlotFree: false });
+      expect(runningSuites(legacyBusy)).toBe(1);
+      expect(evaluateGauges(withLimit(1), legacyBusy, "suite").ok).toBe(false);
+      expect(evaluateGauges(withLimit(2), legacyBusy, "suite").ok).toBe(true);
+      expect(runningSuites(gauges({ suiteCount: null, suiteSlotFree: true }))).toBe(0);
+      // A conflicting boolean never lowers a measured count, nor the reverse.
+      expect(runningSuites(gauges({ suiteCount: 0, suiteSlotFree: false }))).toBe(1);
+      expect(runningSuites(gauges({ suiteCount: 2, suiteSlotFree: true }))).toBe(2);
+    });
+
+    it("keeps oneSuiteAtATime as the alias when maxConcurrentSuites is absent", () => {
+      const legacyOn = cloneDefault();
+      delete legacyOn.capacity.maxConcurrentSuites;
+      legacyOn.capacity.oneSuiteAtATime = true;
+      expect(suiteLimit(legacyOn.capacity)).toBe(1);
+      expect(evaluateGauges(legacyOn, gauges({ suiteCount: 1 }), "suite").ok).toBe(false);
+      expect(evaluateGauges(legacyOn, gauges({ suiteCount: 0 }), "suite").ok).toBe(true);
+
+      const legacyOff = cloneDefault();
+      delete legacyOff.capacity.maxConcurrentSuites;
+      legacyOff.capacity.oneSuiteAtATime = false;
+      expect(suiteLimit(legacyOff.capacity)).toBeNull();
+      const uncapped = evaluateGauges(legacyOff, gauges({ suiteCount: 8 }), "suite");
+      expect(uncapped.ok).toBe(true);
+      expect(uncapped.measured).toMatchObject({ maxConcurrentSuites: null, suiteSlotEnforced: false });
+    });
+
+    it("lets maxConcurrentSuites win over the legacy alias", () => {
+      const raised = withLimit(3);
+      raised.capacity.oneSuiteAtATime = true;
+      expect(suiteLimit(raised.capacity)).toBe(3);
+      expect(evaluateGauges(raised, gauges({ suiteCount: 2 }), "suite").ok).toBe(true);
+
+      const capped = withLimit(2);
+      capped.capacity.oneSuiteAtATime = false;
+      expect(suiteLimit(capped.capacity)).toBe(2);
+      expect(evaluateGauges(capped, gauges({ suiteCount: 2 }), "suite").ok).toBe(false);
+    });
+
+    it("defaults to a limit of 1 in the built-in policy", () => {
+      expect(suiteLimit(cloneDefault().capacity)).toBe(1);
+    });
   });
 
   it("refuses local-llm when every llama slot is busy and admits when one is free", () => {
@@ -203,11 +285,52 @@ describe("machine probes (Linux correctness)", () => {
     expect(countWorkerRoots(comm, argv)).toBe(2);
   });
 
-  it("detects a running test runner as a busy suite slot", () => {
+  it("counts running test runners, and zero when none run", () => {
     const argv = "12 node /x/node_modules/.bin/vitest run\n13 bash -c sleep";
-    expect(suiteSlotFromArgv(argv)).toBe(false);
-    expect(suiteSlotFromArgv("12 node /usr/bin/serve\n")).toBe(true);
-    expect(suiteSlotFromArgv(null)).toBeNull();
+    expect(countSuiteRoots(null, argv)).toBe(1);
+    expect(countSuiteRoots(null, "12 node /usr/bin/serve\n")).toBe(0);
+    expect(countSuiteRoots(null, null)).toBeNull();
+  });
+
+  it("counts one suite per root and collapses a run's own wrapper chain and workers", () => {
+    // Run A: npm test -> sh -c vitest -> node vitest -> vitest-matching worker.
+    // Run B: a standalone pytest. Run C: cargo test with a child test binary.
+    const comm = [
+      "1 0 100 /sbin/init",
+      "100 1 100 npm",
+      "101 100 100 sh",
+      "102 101 100 node",
+      "103 102 100 node",
+      "200 1 100 pytest",
+      "300 1 100 cargo",
+      "301 300 100 cargo",
+    ].join("\n");
+    const argv = [
+      "100 npm test",
+      "101 sh -c vitest run",
+      "102 node /x/node_modules/.bin/vitest run",
+      "103 node /x/node_modules/.bin/vitest run --pool forks",
+      "200 /usr/bin/pytest tests/",
+      "300 cargo test --release",
+      "301 cargo test --release -p inner",
+    ].join("\n");
+    expect(countSuiteRoots(comm, argv)).toBe(3);
+    // Without a parent map every matching process stands alone.
+    expect(countSuiteRoots(null, argv)).toBe(7);
+  });
+
+  it("does not count a non-matching ancestor against its suite child, and excludes the probe tree", () => {
+    const comm = ["1 0 1 /sbin/init", "50 1 1 bash", "51 50 1 node", "60 1 1 node"].join("\n");
+    const argv = ["50 bash fm-test-run.sh", "51 node vitest run", "60 node vitest run"].join("\n");
+    expect(countSuiteRoots(comm, argv)).toBe(2);
+    expect(countSuiteRoots(comm, argv, new Set([60]))).toBe(1);
+  });
+
+  it("promotes a suite child to a root when its matching ancestor is excluded", () => {
+    const comm = ["1 0 1 /sbin/init", "70 1 1 npm", "71 70 1 node"].join("\n");
+    const argv = ["70 npm test", "71 node vitest run"].join("\n");
+    expect(countSuiteRoots(comm, argv)).toBe(1);
+    expect(countSuiteRoots(comm, argv, new Set([70]))).toBe(1);
   });
 });
 
@@ -256,19 +379,54 @@ describe("llama slots gauge", () => {
 
   describe("measureMachine probe seam", () => {
     const savedEnv: Record<string, string | undefined> = {};
-    const KEYS = ["LLM_ROUTER_MACHINE_JSON", "LLM_ROUTER_LLAMA_SLOTS_URL", "LLM_ROUTER_LLAMA_SLOTS_BUSY", "LLM_ROUTER_LLAMA_PARALLEL"];
+    let dir: string;
+    const KEYS = ["LLM_ROUTER_MACHINE_PS_COMM", "LLM_ROUTER_MACHINE_PS_ARGV", "LLM_ROUTER_SUITE_COUNT", "LLM_ROUTER_MACHINE_JSON", "LLM_ROUTER_LLAMA_SLOTS_URL", "LLM_ROUTER_LLAMA_SLOTS_BUSY", "LLM_ROUTER_LLAMA_PARALLEL"];
 
     beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "llm-router-probe-"));
       for (const key of KEYS) savedEnv[key] = process.env[key];
       // Drop the suite-wide gauge fixture so these assertions see the raw probe.
       delete process.env.LLM_ROUTER_MACHINE_JSON;
     });
 
     afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
       for (const key of KEYS) {
         if (savedEnv[key] === undefined) delete process.env[key];
         else process.env[key] = savedEnv[key];
       }
+    });
+
+    it("derives suiteCount and suiteSlotFree from a replayed ps snapshot", () => {
+      const comm = join(dir, "suites.comm.ps");
+      const argv = join(dir, "suites.argv.ps");
+      writeFileSync(
+        comm,
+        ["1 0 1 /sbin/init", "10 1 1 npm", "11 10 1 node", "20 1 1 pytest", "30 1 1 node"].join("\n"),
+      );
+      writeFileSync(
+        argv,
+        ["10 npm test", "11 node vitest run", "20 pytest -q", "30 node /usr/bin/serve"].join("\n"),
+      );
+      process.env.LLM_ROUTER_MACHINE_PS_COMM = comm;
+      process.env.LLM_ROUTER_MACHINE_PS_ARGV = argv;
+      expect(measureMachine()).toMatchObject({ suiteCount: 2, suiteSlotFree: false });
+
+      writeFileSync(argv, "30 node /usr/bin/serve\n");
+      expect(measureMachine()).toMatchObject({ suiteCount: 0, suiteSlotFree: true });
+    });
+
+    it("pins the suite count from LLM_ROUTER_SUITE_COUNT without reading ps", () => {
+      process.env.LLM_ROUTER_SUITE_COUNT = "3";
+      expect(measureMachine()).toMatchObject({ suiteCount: 3 });
+    });
+
+    it("keeps a boolean-only fixture from inheriting the live suite count", () => {
+      const path = join(dir, "bool-only.json");
+      writeFileSync(path, JSON.stringify({ suiteSlotFree: true }));
+      process.env.LLM_ROUTER_MACHINE_JSON = path;
+      process.env.LLM_ROUTER_SUITE_COUNT = "3";
+      expect(measureMachine()).toMatchObject({ suiteSlotFree: true, suiteCount: null });
     });
 
     it("reports unknown, not free, when the llama server is unreachable", () => {
