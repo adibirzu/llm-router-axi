@@ -37,6 +37,7 @@ describe("default policy", () => {
     expect(policy.routing.telemetryMaxAgeSeconds).toBe(300);
     expect(policy.capacity.agentCeiling).toBe(10);
     expect(policy.capacity.oneSuiteAtATime).toBe(true);
+    expect(policy.capacity.maxConcurrentSuites).toBe(1);
   });
 
   it("keeps every lane's candidate-group references resolvable", () => {
@@ -208,6 +209,20 @@ describe("malformed policy refusal", () => {
     if (!result.ok) {
       expect(result.issues.some((issue) => issue.path === "/_model_fallback")).toBe(true);
     }
+  });
+
+  it("bounds capacity.maxConcurrentSuites to an integer from 1 to 8 and keeps it optional", () => {
+    const withLimit = (value: unknown) => {
+      const policy = cloneDefault() as { capacity: Record<string, unknown> };
+      policy.capacity.maxConcurrentSuites = value;
+      return validatePolicy(policy);
+    };
+    for (const ok of [1, 3, 8]) expect(withLimit(ok).ok).toBe(true);
+    for (const bad of [0, 9, -1, 1.5, "3", null]) expect(withLimit(bad).ok).toBe(false);
+
+    const legacy = cloneDefault() as { capacity: Record<string, unknown> };
+    delete legacy.capacity.maxConcurrentSuites;
+    expect(validatePolicy(legacy).ok).toBe(true);
   });
 
   it("refuses a cyclic lane whose chain has fewer than two models", () => {

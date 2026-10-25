@@ -86,7 +86,14 @@ export const POLICY_SCHEMA = {
         oneSuiteAtATime: {
           type: "boolean",
           description:
-            "When true, route/explain treat an occupied test-suite slot as a capacity refusal.",
+            "Legacy alias for maxConcurrentSuites: true caps test suites at 1, false removes the cap. Ignored when maxConcurrentSuites is set.",
+        },
+        maxConcurrentSuites: {
+          type: "integer",
+          minimum: 1,
+          maximum: 8,
+          description:
+            "How many test suites may run at once (default 1). capacity --for suite refuses when that many are already running; spawn admission never does.",
         },
         memoryFreeReservePercent: {
           type: "integer",

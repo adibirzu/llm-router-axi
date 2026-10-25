@@ -45,7 +45,14 @@ export type MemoryPressureMax = "normal" | "warn" | "ignore";
 
 export interface CapacitySettings {
   agentCeiling: number;
+  /** Legacy alias: true is `maxConcurrentSuites` 1, false is no suite cap. */
   oneSuiteAtATime: boolean;
+  /**
+   * How many test suites may run at once; `capacity --for suite` refuses when
+   * that many are already running. Wins over `oneSuiteAtATime` when present.
+   * Optional for a policy file written before it landed.
+   */
+  maxConcurrentSuites?: number;
   memoryFreeReservePercent: number;
   maxLoadPerCore: number;
   /**

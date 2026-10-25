@@ -1,10 +1,11 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { main } from "../src/cli.js";
+import { readDefaultPolicy } from "../src/policy/index.js";
 
 let dir: string;
 let savedExitCode: number | undefined;
@@ -248,8 +249,8 @@ describe("top-level surface", () => {
 describe("capacity admission purpose", () => {
   let savedMachine: string | undefined;
 
-  function machineFixture(suiteSlotFree: boolean): string {
-    const path = join(dir, `machine-${suiteSlotFree ? "free" : "occupied"}.json`);
+  function machineFixture(suiteSlotFree: boolean, suiteCount?: number): string {
+    const path = join(dir, `machine-${suiteCount ?? (suiteSlotFree ? "free" : "occupied")}.json`);
     writeFileSync(
       path,
       JSON.stringify({
@@ -260,9 +261,18 @@ describe("capacity admission purpose", () => {
         swapUsedPct: 5,
         swapouts: 0,
         suiteSlotFree,
+        ...(suiteCount === undefined ? {} : { suiteCount }),
       }),
     );
     return path;
+  }
+
+  function writePolicy(capacity: Record<string, unknown>, drop: string[] = []): void {
+    const policy = JSON.parse(JSON.stringify(readDefaultPolicy())) as { capacity: Record<string, unknown> };
+    Object.assign(policy.capacity, capacity);
+    for (const key of drop) delete policy.capacity[key];
+    mkdirSync(join(dir, "llm-router-axi"), { recursive: true });
+    writeFileSync(join(dir, "llm-router-axi", "policy.json"), JSON.stringify(policy));
   }
 
   beforeEach(() => {
@@ -279,14 +289,14 @@ describe("capacity admission purpose", () => {
 
     const report = await run(["capacity"]);
     expect(report.exitCode).toBe(0);
-    expect(report.output).toContain("occupied");
+    expect(report.output).toContain("1 running");
 
     const check = await run(["capacity", "check"]);
     expect(check.exitCode).toBe(0);
 
     const suite = await run(["capacity", "--for", "suite"]);
     expect(suite.exitCode).toBe(1);
-    expect(suite.output).toContain("one-suite-at-a-time slot is occupied");
+    expect(suite.output).toContain("test-suite slots are full (1 running, limit 1)");
 
     const suiteCheck = await run(["capacity", "check", "--for", "suite"]);
     expect(suiteCheck.exitCode).toBe(1);
@@ -297,6 +307,29 @@ describe("capacity admission purpose", () => {
 
     expect((await run(["capacity"])).exitCode).toBe(0);
     expect((await run(["capacity", "check"])).exitCode).toBe(0);
+    expect((await run(["capacity", "--for", "suite"])).exitCode).toBe(0);
+  });
+
+  it("reports the count and the limit, and admits suites up to maxConcurrentSuites", async () => {
+    writePolicy({ maxConcurrentSuites: 3 });
+
+    process.env.LLM_ROUTER_MACHINE_JSON = machineFixture(false, 2);
+    const below = await run(["capacity", "--for", "suite", "--json"]);
+    expect(below.exitCode).toBe(0);
+    expect(JSON.parse(below.output).measured).toMatchObject({ suiteCount: 2, maxConcurrentSuites: 3 });
+    expect((await run(["capacity", "--for", "suite"])).output).toContain("2 running");
+
+    process.env.LLM_ROUTER_MACHINE_JSON = machineFixture(false, 3);
+    const full = await run(["capacity", "--for", "suite"]);
+    expect(full.exitCode).toBe(1);
+    expect(full.output).toContain("test-suite slots are full (3 running, limit 3)");
+    expect((await run(["capacity"])).exitCode).toBe(0);
+  });
+
+  it("honours the legacy oneSuiteAtATime alias in a policy file without maxConcurrentSuites", async () => {
+    writePolicy({ oneSuiteAtATime: false }, ["maxConcurrentSuites"]);
+
+    process.env.LLM_ROUTER_MACHINE_JSON = machineFixture(false, 6);
     expect((await run(["capacity", "--for", "suite"])).exitCode).toBe(0);
   });
 
