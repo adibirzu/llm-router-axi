@@ -298,11 +298,13 @@ come from the policy `routing` block, overridable by flag.
 
 ### 3.6 `capacity` and `classify-evidence`
 
-`capacity [check] [--for <spawn|suite>] [--json]` reports the machine gauges and
+`capacity [check] [--for <spawn|suite|local-llm>] [--json]` reports the machine gauges and
 the policy verdict. The default `spawn` purpose (what an agent spawn asks) never
 refuses on running suites; `--for suite` refuses when the running suite count
-reaches `maxConcurrentSuites` and `check`/`--for suite` exit `1` on a refusal. This is
-the surface `bin/fm-capacity.sh` and `fm-test-run.sh` shim onto in P3.
+reaches `maxConcurrentSuites`; `--for local-llm` refuses when every llama.cpp
+parallel slot is busy; `check`, `--for suite`, and `--for local-llm` exit `1` on
+a refusal. This is the surface `bin/fm-capacity.sh` and `fm-test-run.sh` shim
+onto in P3.
 `classify-evidence [--file <path>]`
 exposes the shared depletion detector (stdin default) and prints
 `classification=none` or `classification=depleted` plus the matched signature.

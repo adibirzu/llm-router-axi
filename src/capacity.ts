@@ -10,10 +10,11 @@ export interface CapacityVerdict {
 
 /**
  * What the verdict is admitting. A `spawn` (agent launch) is never refused
- * because a test suite is running: the suite slot is context, because the
- * one-suite rule serializes suite *starts*, not agent spawns. A `suite` start
- * gates on the slot, so `fm-test-run.sh` can call `capacity --for suite` before
- * it takes the flock. `local-llm` gates a local-Qwen agent launch on the
+ * because a test suite is running: the suite count is context, because the
+ * suite cap admits suite *starts*, not agent spawns. A `suite` start gates on
+ * the configured suite limit, so `fm-test-run.sh` can call
+ * `capacity --for suite` before it takes the flock. `local-llm` gates a
+ * local-Qwen agent launch on the
  * llama.cpp `--parallel` slot pool instead of the fleet-wide agent ceiling.
  */
 export type CapacityPurpose = "spawn" | "suite" | "local-llm";
