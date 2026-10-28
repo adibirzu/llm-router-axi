@@ -242,7 +242,8 @@ Same descriptor flags as `route` (and deliberately **not** `--flags`). Output is
 a `candidates[]` table — `rank` (the 1-based chain position each candidate was
 considered at), `harness, provider, pool, model, decision (eligible|refused),
 reason` — plus the `selected` candidate and `capacity` verdict, so an operator
-can see why each candidate was accepted or dropped.
+can see why each candidate was accepted or dropped. A lane skipped by a
+429-derived cooldown carries `cooldown: "429 at <iso>"` beside its reason.
 Rejection reasons are the frozen selector strings, not new prose.
 
 ### 3.3a `check` (explicit override gate)
@@ -276,6 +277,16 @@ provider; `ok` clears the cooldown. `opencode` and `opencode-go` share one
 cooldown: a record under either spelling gates, and an `ok` under either
 clears, both (`cooldownKeys` in `src/selector.ts`). Selection writes the least-recent-use
 ledger; both persist across invocations.
+
+**429-derived cooldowns.** The outcome is read with the shared
+`classify-evidence` depletion vocabulary. A recorded 429/quota signal opens the
+cooldown immediately, storing the observed ISO time plus a suspect flag
+(receipt line `cooldown: "429 at <iso>"`, and the same line beside the lane's
+cooldown reason in `explain`). The lane is skipped exactly like a below-reserve
+refusal while the cooldown is active. While the last usage read still shows
+positive headroom for that window, the window stays suspect and the effective
+reserve doubles (`routing.reservePercent` x2); the next fresh non-429 read for
+that window agrees, clears the suspect flag, and restores the normal reserve.
 
 ### 3.5 `select` (arbitrary-profile compatibility)
 
