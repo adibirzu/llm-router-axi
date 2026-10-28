@@ -302,6 +302,34 @@ describe("opencode-go telemetry identity", () => {
     expect(decision.reason).toContain("headroom=76%");
   });
 
+  it("routes and checks a policy candidate declared with the live Go identity", async () => {
+    const policy = cloneDefault();
+    policy.candidateGroups.workers = [{
+      harness: "opencode",
+      provider: "opencode-go",
+      pool: "opencode-go",
+      model: "opencode-go/deepseek-v4.1-flash",
+    }];
+    writePolicy(policy);
+    const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+    const routed = await run([
+      "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--json",
+    ]);
+    expect(routed.exitCode).toBe(0);
+    expect(JSON.parse(routed.output)).toMatchObject({ provider: "opencode-go" });
+
+    const checked = await run([
+      "check", "--harness", "opencode", "--model", "opencode-go/deepseek-v4.1-flash",
+      "--usage-json", usageFile, "--json",
+    ]);
+    expect(checked.exitCode).toBe(0);
+    expect(JSON.parse(checked.output)).toMatchObject({
+      allowed: true,
+      requested: { provider: "opencode-go" },
+    });
+  });
+
   it("refuses byte-identically when neither opencode row is live", async () => {
     writePolicy(cloneDefault());
     const usageFile = writeJson("usage.json", {
