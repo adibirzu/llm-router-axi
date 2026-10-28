@@ -357,6 +357,36 @@ describe("opencode-go telemetry identity", () => {
     });
   }
 
+  for (const provider of ["opencode", "opencode-go"]) {
+    for (const model of [undefined, "other/model"]) {
+      it(`refuses ${model ?? "an omitted model"} resolved from ${provider} to Go telemetry`, async () => {
+        const policy = cloneDefault();
+        policy.candidateGroups.workers = [{
+          harness: "opencode",
+          provider,
+          pool: "opencode-go",
+          ...(model ? { model } : {}),
+        }];
+        writePolicy(policy);
+        const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+        const routed = await run([
+          "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile,
+        ]);
+        expect(routed.exitCode).toBe(2);
+        expect(routed.output).toContain("provider opencode-go requires OpenCode Go pool");
+
+        if (model) {
+          const checked = await run([
+            "check", "--harness", "opencode", "--model", model, "--usage-json", usageFile,
+          ]);
+          expect(checked.exitCode).toBe(2);
+          expect(checked.output).toContain("provider opencode-go requires OpenCode Go pool");
+        }
+      });
+    }
+  }
+
   it("refuses byte-identically when neither opencode row is live", async () => {
     writePolicy(cloneDefault());
     const usageFile = writeJson("usage.json", {
@@ -461,17 +491,22 @@ describe("select: opencode dispatch-profile provider identity", () => {
     expect(output).toContain("native harness opencode requires provider opencode");
   });
 
-  it("refuses a free model declared with Go telemetry", async () => {
-    writePolicy(cloneDefault());
-    const usageFile = writeJson("usage.json", opencodeGoUsage());
+  for (const model of [undefined, "opencode/big-pickle", "other/model"]) {
+    it(`refuses ${model ?? "an omitted model"} declared with Go telemetry`, async () => {
+      writePolicy(cloneDefault());
+      const usageFile = writeJson("usage.json", opencodeGoUsage());
+      const profile = {
+        harness: "opencode",
+        provider: "opencode-go",
+        quotaWindow: "weekly",
+        ...(model ? { model } : {}),
+      };
 
-    const { output, exitCode } = await run([
-      "select",
-      "--quota-json",
-      usageFile,
-      '[{"harness":"opencode","provider":"opencode-go","model":"opencode/big-pickle","quotaWindow":"weekly"}]',
-    ]);
-    expect(exitCode).toBe(2);
-    expect(output).toContain("provider opencode-go requires OpenCode Go pool");
-  });
+      const { output, exitCode } = await run([
+        "select", "--quota-json", usageFile, JSON.stringify([profile]),
+      ]);
+      expect(exitCode).toBe(2);
+      expect(output).toContain("provider opencode-go requires OpenCode Go pool");
+    });
+  }
 });

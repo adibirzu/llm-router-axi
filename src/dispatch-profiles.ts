@@ -138,7 +138,11 @@ export function parseDispatchProfiles(input: string): DispatchProfile[] {
       (harness === "opencode" && explicitProvider === "opencode-go");
     if (!nativeOk) die(`native harness ${harness} requires provider ${nativeProvider}`);
     const model = typeof candidate["model"] === "string" ? (candidate["model"] as string) : undefined;
-    if (harness === "opencode" && explicitProvider === "opencode-go" && model?.startsWith("opencode/")) {
+    if (
+      harness === "opencode" &&
+      explicitProvider === "opencode-go" &&
+      !model?.startsWith("opencode-go/")
+    ) {
       die("provider opencode-go requires OpenCode Go pool");
     }
     const provider = explicitProvider ?? nativeProvider;

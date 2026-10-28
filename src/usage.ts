@@ -280,17 +280,17 @@ export function candidateToProfile(
 ): { profile: EngineProfile } | { error: string } {
   const resolved = resolveProvider(candidate.harness, candidate.provider);
   if ("error" in resolved) return resolved;
-  if (
-    candidate.harness === "opencode" &&
-    resolved.provider === OPENCODE_GO_TELEMETRY &&
-    !isOpencodeGoCandidate(policy, candidate)
-  ) {
-    return { error: "provider opencode-go requires OpenCode Go pool" };
-  }
   const provider =
     candidate.harness === "opencode" && resolved.provider === "opencode"
       ? opencodeTelemetryProvider(policy, candidate, quota)
       : resolved.provider;
+  if (
+    candidate.harness === "opencode" &&
+    provider === OPENCODE_GO_TELEMETRY &&
+    !isOpencodeGoCandidate(policy, candidate)
+  ) {
+    return { error: "provider opencode-go requires OpenCode Go pool" };
+  }
   const pool = resolvePool(policy, candidate, provider, quota);
   const profile: EngineProfile = {
     harness: candidate.harness,
@@ -308,7 +308,7 @@ function isOpencodeGoCandidate(policy: Policy, candidate: Candidate): boolean {
   const pool = candidatePoolName(policy, candidate);
   return (
     (pool === policy.pools.opencode.go || pool === "go") &&
-    !candidate.model?.startsWith("opencode/")
+    candidate.model?.startsWith("opencode-go/") === true
   );
 }
 
