@@ -137,11 +137,14 @@ export function parseDispatchProfiles(input: string): DispatchProfile[] {
       explicitProvider === nativeProvider ||
       (harness === "opencode" && explicitProvider === "opencode-go");
     if (!nativeOk) die(`native harness ${harness} requires provider ${nativeProvider}`);
+    const model = typeof candidate["model"] === "string" ? (candidate["model"] as string) : undefined;
+    if (harness === "opencode" && explicitProvider === "opencode-go" && model?.startsWith("opencode/")) {
+      die("provider opencode-go requires OpenCode Go pool");
+    }
     const provider = explicitProvider ?? nativeProvider;
     if (!provider || !DISPATCH_PROVIDERS.has(provider)) {
       die(`provider identity is unresolved or unsupported for harness ${harness}`);
     }
-    const model = typeof candidate["model"] === "string" ? (candidate["model"] as string) : undefined;
     const effort =
       typeof candidate["effort"] === "string" ? (candidate["effort"] as string) : undefined;
 
