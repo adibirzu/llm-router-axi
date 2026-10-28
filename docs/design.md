@@ -97,10 +97,12 @@ A candidate declares the identity the router needs to price and spawn it:
 - `provider` is the `usage-axi` provider id used to join telemetry. OpenCode
   profiles carry an explicit provider; `opencode` is valid for either pool and
   lets routing choose the live telemetry row, while `opencode-go` is valid only
-  for a Go-pool candidate and must not name a free `opencode/` model. Without a
-  provider the selector dies `provider identity is unresolved or unsupported`
-  (P0 §3), so the pool is the router's job to price.
-- `model` is optional; omitted means the harness default.
+  for a Go-pool candidate with an explicit `opencode-go/` model; omitted,
+  free `opencode/`, and other model prefixes are refused. Without a provider
+  the selector dies `provider identity is unresolved or unsupported` (P0 §3),
+  so the pool is the router's job to price.
+- `model` is optional; omitted means the harness default, except for a direct
+  `opencode-go` provider profile.
 - `pool` selects the split pool the candidate is priced against (below).
 - `effort` optionally overrides the lane effort; `needs` lists capability
   requirements (`vision`, `long-context`, `tools`).
