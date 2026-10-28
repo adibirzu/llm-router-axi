@@ -330,30 +330,32 @@ describe("opencode-go telemetry identity", () => {
     });
   });
 
-  it("refuses a free-pool policy candidate declared with Go telemetry", async () => {
-    const policy = cloneDefault();
-    policy.candidateGroups.workers = [{
-      harness: "opencode",
-      provider: "opencode-go",
-      pool: "opencode",
-      model: "opencode/big-pickle",
-    }];
-    writePolicy(policy);
-    const usageFile = writeJson("usage.json", opencodeGoUsage());
+  for (const pool of ["opencode", "opencode-go"]) {
+    it(`refuses a free model declared with Go telemetry and ${pool} pool`, async () => {
+      const policy = cloneDefault();
+      policy.candidateGroups.workers = [{
+        harness: "opencode",
+        provider: "opencode-go",
+        pool,
+        model: "opencode/big-pickle",
+      }];
+      writePolicy(policy);
+      const usageFile = writeJson("usage.json", opencodeGoUsage());
 
-    const routed = await run([
-      "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile,
-    ]);
-    expect(routed.exitCode).toBe(2);
-    expect(routed.output).toContain("provider opencode-go requires OpenCode Go pool");
+      const routed = await run([
+        "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile,
+      ]);
+      expect(routed.exitCode).toBe(2);
+      expect(routed.output).toContain("provider opencode-go requires OpenCode Go pool");
 
-    const checked = await run([
-      "check", "--harness", "opencode", "--model", "opencode/big-pickle",
-      "--usage-json", usageFile,
-    ]);
-    expect(checked.exitCode).toBe(2);
-    expect(checked.output).toContain("provider opencode-go requires OpenCode Go pool");
-  });
+      const checked = await run([
+        "check", "--harness", "opencode", "--model", "opencode/big-pickle",
+        "--usage-json", usageFile,
+      ]);
+      expect(checked.exitCode).toBe(2);
+      expect(checked.output).toContain("provider opencode-go requires OpenCode Go pool");
+    });
+  }
 
   it("refuses byte-identically when neither opencode row is live", async () => {
     writePolicy(cloneDefault());
