@@ -100,6 +100,33 @@ function legacyOpencodeUsage(): unknown {
   };
 }
 
+async function runWithStderr(
+  argv: string[],
+): Promise<{ output: string; stderr: string; exitCode: number }> {
+  process.exitCode = 0;
+  let output = "";
+  let stderr = "";
+  const original = process.stderr.write;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await main({
+      argv,
+      stdout: {
+        write: (chunk: string) => {
+          output += chunk;
+          return true;
+        },
+      },
+    });
+  } finally {
+    process.stderr.write = original;
+  }
+  return { output, stderr, exitCode: process.exitCode ?? 0 };
+}
+
 beforeEach(() => {
   savedExitCode = process.exitCode;
   savedEnv = {
@@ -297,5 +324,85 @@ describe("opencode-go telemetry identity", () => {
     expect(output).toContain(
       "candidate provider=opencode-go unavailable: provider telemetry unavailable",
     );
+  });
+});
+
+describe("select: opencode dispatch-profile provider identity", () => {
+  it("selects the Go lane on the live opencode-go row with its declared window", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+    const { output, exitCode } = await run([
+      "select",
+      "--quota-json",
+      usageFile,
+      '[{"harness":"opencode","provider":"opencode-go","model":"opencode-go/muse-spark-1.3-contributor","quotaWindow":"weekly"}]',
+    ]);
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(output)).toEqual({
+      harness: "opencode",
+      provider: "opencode-go",
+      model: "opencode-go/muse-spark-1.3-contributor",
+    });
+  });
+
+  it("accepts both native spellings side by side and keeps the Go row first", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+    const { stderr, exitCode } = await runWithStderr([
+      "select",
+      "--quota-json",
+      usageFile,
+      '[{"harness":"opencode","provider":"opencode","quotaWindow":"weekly"},{"harness":"opencode","provider":"opencode-go","model":"opencode-go/muse-spark-1.3-contributor","quotaWindow":"weekly"}]',
+    ]);
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
+  });
+
+  it("refuses the legacy opencode identity with the frozen telemetry string on Go-only telemetry", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+    const { stderr, exitCode } = await runWithStderr([
+      "select",
+      "--quota-json",
+      usageFile,
+      '[{"harness":"opencode","provider":"opencode","quotaWindow":"weekly"}]',
+    ]);
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain(
+      "candidate provider=opencode unavailable: provider telemetry unavailable",
+    );
+  });
+
+  it("fails closed provider-wide when the Go profile declares no window", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+    const { stderr, exitCode } = await runWithStderr([
+      "select",
+      "--quota-json",
+      usageFile,
+      '[{"harness":"opencode","provider":"opencode-go","model":"opencode-go/muse-spark-1.3-contributor"}]',
+    ]);
+    expect(exitCode).toBe(3);
+    expect(stderr).toContain(
+      "candidate provider=opencode-go unavailable: quota headroom 4% is at or below 20% reserve",
+    );
+  });
+
+  it("refuses a non-native provider for the opencode harness with exit 2", async () => {
+    writePolicy(cloneDefault());
+    const usageFile = writeJson("usage.json", opencodeGoUsage());
+
+    const { output, exitCode } = await run([
+      "select",
+      "--quota-json",
+      usageFile,
+      '[{"harness":"opencode","provider":"bogus"}]',
+    ]);
+    expect(exitCode).toBe(2);
+    expect(output).toContain("native harness opencode requires provider opencode");
   });
 });

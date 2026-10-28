@@ -38,6 +38,8 @@ export const DISPATCH_PROVIDERS: ReadonlySet<string> = new Set([
   "grok",
   "cursor",
   "agy",
+  "opencode",
+  "opencode-go",
 ]);
 
 export const NATIVE_PROVIDER: ReadonlyMap<string, string> = new Map([
@@ -46,6 +48,7 @@ export const NATIVE_PROVIDER: ReadonlyMap<string, string> = new Map([
   ["grok", "grok"],
   ["cursor", "cursor"],
   ["agy", "agy"],
+  ["opencode", "opencode"],
 ]);
 
 export interface DispatchProfile {
@@ -125,9 +128,15 @@ export function parseDispatchProfiles(input: string): DispatchProfile[] {
       typeof candidate["provider"] === "string" && candidate["provider"]
         ? (candidate["provider"] as string)
         : undefined;
-    if (nativeProvider && explicitProvider && explicitProvider !== nativeProvider) {
-      die(`native harness ${harness} requires provider ${nativeProvider}`);
-    }
+    // The opencode harness is metered on whichever OpenCode row is live: the
+    // quota-axi `opencode-go` identity or the legacy `opencode` row, so both
+    // spellings are native-compatible for that harness alone.
+    const nativeOk =
+      !nativeProvider ||
+      !explicitProvider ||
+      explicitProvider === nativeProvider ||
+      (harness === "opencode" && explicitProvider === "opencode-go");
+    if (!nativeOk) die(`native harness ${harness} requires provider ${nativeProvider}`);
     const provider = explicitProvider ?? nativeProvider;
     if (!provider || !DISPATCH_PROVIDERS.has(provider)) {
       die(`provider identity is unresolved or unsupported for harness ${harness}`);
