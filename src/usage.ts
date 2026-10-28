@@ -283,7 +283,7 @@ export function candidateToProfile(
   if (
     candidate.harness === "opencode" &&
     resolved.provider === OPENCODE_GO_TELEMETRY &&
-    !isOpencodeGoPool(policy, candidate)
+    !isOpencodeGoCandidate(policy, candidate)
   ) {
     return { error: "provider opencode-go requires OpenCode Go pool" };
   }
@@ -304,9 +304,12 @@ export function candidateToProfile(
   return { profile };
 }
 
-function isOpencodeGoPool(policy: Policy, candidate: Candidate): boolean {
+function isOpencodeGoCandidate(policy: Policy, candidate: Candidate): boolean {
   const pool = candidatePoolName(policy, candidate);
-  return pool === policy.pools.opencode.go || pool === "go";
+  return (
+    (pool === policy.pools.opencode.go || pool === "go") &&
+    !candidate.model?.startsWith("opencode/")
+  );
 }
 
 /** The human pool name a candidate draws on, for the decision's `pool` field. */
