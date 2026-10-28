@@ -13,6 +13,7 @@ const NATIVE_PROVIDER: ReadonlyMap<string, string> = new Map([
   ["grok", "grok"],
   ["cursor", "cursor"],
   ["agy", "agy"],
+  ["opencode", "opencode"],
 ]);
 
 /**
