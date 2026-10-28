@@ -122,7 +122,11 @@ type ProviderResolution = { provider: string } | { error: string };
 
 function resolveProvider(harness: string, provider: string): ProviderResolution {
   const native = NATIVE_PROVIDER.get(harness);
-  if (native && provider !== native) {
+  const nativeCompatible =
+    !native ||
+    provider === native ||
+    (harness === "opencode" && provider === OPENCODE_GO_TELEMETRY);
+  if (!nativeCompatible) {
     return { error: `native harness ${harness} requires provider ${native}` };
   }
   if (!provider) {
