@@ -280,6 +280,13 @@ export function candidateToProfile(
 ): { profile: EngineProfile } | { error: string } {
   const resolved = resolveProvider(candidate.harness, candidate.provider);
   if ("error" in resolved) return resolved;
+  if (
+    candidate.harness === "opencode" &&
+    resolved.provider === OPENCODE_GO_TELEMETRY &&
+    !isOpencodeGoPool(policy, candidate)
+  ) {
+    return { error: "provider opencode-go requires OpenCode Go pool" };
+  }
   const provider =
     candidate.harness === "opencode" && resolved.provider === "opencode"
       ? opencodeTelemetryProvider(policy, candidate, quota)
@@ -295,6 +302,11 @@ export function candidateToProfile(
     ...(pool.poolLabel ? { poolLabel: pool.poolLabel } : {}),
   };
   return { profile };
+}
+
+function isOpencodeGoPool(policy: Policy, candidate: Candidate): boolean {
+  const pool = candidatePoolName(policy, candidate);
+  return pool === policy.pools.opencode.go || pool === "go";
 }
 
 /** The human pool name a candidate draws on, for the decision's `pool` field. */
