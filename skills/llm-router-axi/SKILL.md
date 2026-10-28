@@ -74,7 +74,9 @@ npx -y llm-router-axi shadow report
 `route` output: `harness, model, effort, provider, pool, reason,
 fallbacks[], capacity{ok,measured}`. `--json` emits the same decision as JSON;
 `--flags` prints exactly `--harness X --model Y --effort Z` for fm-spawn.
-`explain` lists each candidate with its 1-based chain `rank`.
+`explain` lists each candidate with its 1-based chain `rank`; a lane skipped
+by a 429-derived cooldown carries `cooldown: "429 at <iso>"` beside its
+cooldown reason.
 
 `select` accepts firstmate's rule/profile-array input shape
 (`harness/provider/model/effort/quotaWindow`, a `{use:[...]}` rule, or an
@@ -107,8 +109,11 @@ strings, so the router and `fm-dispatch-select.mjs` stay at parity.
 cached and reused so a route does not re-pay the slow OpenUsage refresh.
 
 `record --outcome rate_limit` parks the provider for the policy
-`routing.cooldownSeconds`; `record --outcome ok` clears it. Cooldown and
-least-recent-use state live under `~/.local/state/llm-router-axi`.
+`routing.cooldownSeconds` immediately, with a 429-derived cooldown
+(`cooldown: "429 at <iso>"`); `record --outcome ok` clears it. While the
+last read still shows positive headroom for a suspect window, the effective
+reserve doubles until the next fresh non-429 read agrees and clears the flag.
+Cooldown and least-recent-use state live under `~/.local/state/llm-router-axi`.
 
 `classify --task <text|file|->` (Slice 1) classifies a task into the
 `kind/difficulty/surface` enums `route` accepts plus classifier-only
