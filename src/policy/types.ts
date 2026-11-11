@@ -49,6 +49,12 @@ export interface CapacitySettings {
   memoryFreeReservePercent: number;
   maxLoadPerCore: number;
   /**
+   * Configured llama.cpp --parallel ceiling for the local qwen fleet.
+   * Reported in capacity measured{}; enforced only for purpose `local-llm`.
+   * Optional for older policy files; code default is 2.
+   */
+  llamaParallel?: number;
+  /**
    * Worst kernel memory-pressure level still admitted. `normal` refuses on
    * `warn`, `warn` refuses only on `critical`, `ignore` never refuses on
    * pressure. An unreadable pressure reading never refuses. Optional for a

@@ -15,7 +15,7 @@ export interface CapacityVerdict {
  * gates on the slot, so `fm-test-run.sh` can call `capacity --for suite` before
  * it takes the flock.
  */
-export type CapacityPurpose = "spawn" | "suite";
+export type CapacityPurpose = "spawn" | "suite" | "local-llm";
 
 const PRESSURE_RANK: Record<"normal" | "warn" | "critical", number> = {
   normal: 0,
@@ -60,6 +60,10 @@ export function mergeGauges(
     swapUsedPct: machine?.swapUsedPct ?? probe.swapUsedPct,
     swapouts: machine?.swapouts ?? probe.swapouts,
     suiteSlotFree: machine?.suiteSlotFree ?? probe.suiteSlotFree,
+    llamaParallel: machine?.llamaParallel ?? probe.llamaParallel,
+    llamaSlotsTotal: machine?.llamaSlotsTotal ?? probe.llamaSlotsTotal,
+    llamaSlotsBusy: machine?.llamaSlotsBusy ?? probe.llamaSlotsBusy,
+    llamaSlotFree: machine?.llamaSlotFree ?? probe.llamaSlotFree,
   };
 }
 
@@ -74,7 +78,18 @@ export function evaluateGauges(
   const memoryPressureMax = settings.memoryPressureMax ?? "warn";
   const maxSwapUsedPercent = settings.maxSwapUsedPercent ?? null;
 
-  const { agents, loadPerCore, memoryFreePct, memoryPressure, swapUsedPct, suiteSlotFree } = gauges;
+  const {
+    agents,
+    loadPerCore,
+    memoryFreePct,
+    memoryPressure,
+    swapUsedPct,
+    suiteSlotFree,
+    llamaParallel,
+    llamaSlotsTotal,
+    llamaSlotsBusy,
+    llamaSlotFree,
+  } = gauges;
 
   if (typeof agents === "number" && agents >= settings.agentCeiling) {
     reasons.push(`fleet is at or above the ${settings.agentCeiling}-agent ceiling (agents=${agents})`);
@@ -108,6 +123,15 @@ export function evaluateGauges(
   if (purpose === "suite" && settings.oneSuiteAtATime && suiteSlotFree === false) {
     reasons.push("the one-suite-at-a-time slot is occupied");
   }
+  // local-llm purpose: refuse when every llama.cpp parallel slot is busy.
+  // Unreadable probes never refuse (same doctrine as other gauges).
+  if (purpose === "local-llm" && llamaSlotFree === false) {
+    const total = llamaSlotsTotal ?? llamaParallel ?? settings.llamaParallel ?? 2;
+    const busy = llamaSlotsBusy ?? total;
+    reasons.push(
+      `local llama slots are full (${busy}/${total}); wait for a free slot before raising another local-qwen agent`,
+    );
+  }
 
   return {
     ok: reasons.length === 0,
@@ -125,8 +149,13 @@ export function evaluateGauges(
       maxSwapUsedPercent,
       suiteSlotFree,
       oneSuiteAtATime: settings.oneSuiteAtATime,
+      llamaParallel: llamaParallel ?? settings.llamaParallel ?? 2,
+      llamaSlotsTotal,
+      llamaSlotsBusy,
+      llamaSlotFree,
       purpose,
       suiteSlotEnforced: purpose === "suite" && settings.oneSuiteAtATime,
+      llamaSlotEnforced: purpose === "local-llm",
     },
     reasons,
   };

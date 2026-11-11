@@ -35,6 +35,12 @@ export interface MachineGauges {
   swapUsedPct: number | null;
   swapouts: number | null;
   suiteSlotFree: boolean | null;
+  /** Configured llama.cpp --parallel ceiling (adi1 qwen38fn). Default 2. */
+  llamaParallel: number | null;
+  llamaSlotsTotal: number | null;
+  llamaSlotsBusy: number | null;
+  /** True when at least one llama slot is free; null when unreadable. */
+  llamaSlotFree: boolean | null;
 }
 
 const WORKER_NAMES = [
@@ -358,7 +364,105 @@ export function readMachineFixture(): Partial<MachineGauges> | null {
     swapUsedPct: num("swapUsedPct"),
     swapouts: num("swapouts"),
     suiteSlotFree: typeof raw["suiteSlotFree"] === "boolean" ? (raw["suiteSlotFree"] as boolean) : null,
+    llamaParallel: num("llamaParallel"),
+    llamaSlotsTotal: num("llamaSlotsTotal"),
+    llamaSlotsBusy: num("llamaSlotsBusy"),
+    llamaSlotFree: typeof raw["llamaSlotFree"] === "boolean" ? (raw["llamaSlotFree"] as boolean) : null,
   };
+}
+
+
+/** Configured --parallel ceiling for the local llama.cpp fleet. */
+export function llamaParallelCeiling(): number {
+  const override = envNumber("LLM_ROUTER_LLAMA_PARALLEL");
+  if (override !== undefined && override !== null && override > 0) return override;
+  return 2;
+}
+
+function llamaSlotsUrl(): string | null {
+  const raw = process.env["LLM_ROUTER_LLAMA_SLOTS_URL"];
+  if (raw === "off" || raw === "0") return null;
+  if (raw && raw.length > 0) return raw;
+  return "http://100.85.233.75:30000/slots";
+}
+
+/** Fold a llama.cpp /slots JSON array into busy/free gauges. Pure. */
+export function foldLlamaSlots(
+  parallel: number,
+  payload: unknown,
+): { llamaSlotsTotal: number | null; llamaSlotsBusy: number | null; llamaSlotFree: boolean | null } {
+  if (!Array.isArray(payload) || payload.length === 0) {
+    return { llamaSlotsTotal: null, llamaSlotsBusy: null, llamaSlotFree: null };
+  }
+  let busy = 0;
+  for (const slot of payload) {
+    if (!slot || typeof slot !== "object") continue;
+    if ((slot as { is_processing?: unknown }).is_processing === true) busy += 1;
+  }
+  const total = payload.length;
+  return {
+    llamaSlotsTotal: total,
+    llamaSlotsBusy: busy,
+    llamaSlotFree: busy < total,
+  };
+}
+
+function probeLlamaSlots(): {
+  llamaParallel: number;
+  llamaSlotsTotal: number | null;
+  llamaSlotsBusy: number | null;
+  llamaSlotFree: boolean | null;
+} {
+  const parallel = llamaParallelCeiling();
+  const override = process.env["LLM_ROUTER_LLAMA_SLOTS_BUSY"];
+  if (override !== undefined) {
+    if (override === "unknown") {
+      return {
+        llamaParallel: parallel,
+        llamaSlotsTotal: null,
+        llamaSlotsBusy: null,
+        llamaSlotFree: null,
+      };
+    }
+    if (/^\d+$/.test(override)) {
+      const busy = Number(override);
+      return {
+        llamaParallel: parallel,
+        llamaSlotsTotal: parallel,
+        llamaSlotsBusy: busy,
+        llamaSlotFree: busy < parallel,
+      };
+    }
+  }
+  const url = llamaSlotsUrl();
+  if (!url) {
+    return {
+      llamaParallel: parallel,
+      llamaSlotsTotal: null,
+      llamaSlotsBusy: null,
+      llamaSlotFree: null,
+    };
+  }
+  // Synchronous probe via curl so measureMachine stays sync like the other gauges.
+  const body = runText("curl", ["-sf", "--connect-timeout", "1", "--max-time", "2", url], 2500);
+  if (!body) {
+    return {
+      llamaParallel: parallel,
+      llamaSlotsTotal: null,
+      llamaSlotsBusy: null,
+      llamaSlotFree: null,
+    };
+  }
+  try {
+    return { llamaParallel: parallel, ...foldLlamaSlots(parallel, JSON.parse(body)) };
+  } catch {
+    return {
+      llamaParallel: parallel,
+      llamaSlotsTotal: null,
+      llamaSlotsBusy: null,
+      llamaSlotFree: null,
+    };
+  }
 }
 
 /**
@@ -368,6 +472,7 @@ export function readMachineFixture(): Partial<MachineGauges> | null {
  */
 export function measureMachine(): MachineGauges {
   const fixture = readMachineFixture();
+  const llama = probeLlamaSlots();
   const measured: MachineGauges = {
     agents: envNumber("LLM_ROUTER_FLEET_AGENTS") ?? null,
     loadPerCore: probeLoadPerCore(),
@@ -375,6 +480,10 @@ export function measureMachine(): MachineGauges {
     memoryPressure: probeMemoryPressure(),
     ...probeSwapValues(),
     suiteSlotFree: envBool("LLM_ROUTER_SUITE_SLOT") ?? null,
+    llamaParallel: llama.llamaParallel,
+    llamaSlotsTotal: llama.llamaSlotsTotal,
+    llamaSlotsBusy: llama.llamaSlotsBusy,
+    llamaSlotFree: llama.llamaSlotFree,
   };
   if (measured.agents === null) {
     const comm = runText("ps", ["-A", "-o", "pid=,ppid=,rss=,comm="]);
