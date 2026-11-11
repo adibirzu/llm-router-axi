@@ -95,10 +95,14 @@ A candidate declares the identity the router needs to price and spawn it:
 - `harness` is one of `claude`, `codex`, `grok`, `cursor`, `agy`, `opencode`
   (the firstmate selector's native set plus `opencode`).
 - `provider` is the `usage-axi` provider id used to join telemetry. OpenCode
-  profiles carry an explicit provider; without one the selector dies
-  `provider identity is unresolved or unsupported` (P0 §3), so the pool is the
-  router's job to price.
-- `model` is optional; omitted means the harness default.
+  profiles carry an explicit provider; `opencode` is valid for either pool and
+  lets routing choose the live telemetry row, while `opencode-go` is valid only
+  for a Go-pool candidate with an explicit `opencode-go/` model; omitted,
+  free `opencode/`, and other model prefixes are refused. Without a provider
+  the selector dies `provider identity is unresolved or unsupported` (P0 §3),
+  so the pool is the router's job to price.
+- `model` is optional; omitted means the harness default, except for a direct
+  `opencode-go` provider profile.
 - `pool` selects the split pool the candidate is priced against (below).
 - `effort` optionally overrides the lane effort; `needs` lists capability
   requirements (`vision`, `long-context`, `tools`).
@@ -200,11 +204,13 @@ keeps the fork's spendPriority ranking.
 `grok`, `cursor`, and `agy` map to the same-named usage-axi provider; an
 `opencode` Go-pool candidate (pool `opencode-go` or an `opencode-go/` model
 prefix) maps to the live `opencode-go` row quota-axi publishes, falling back
-to the legacy `opencode` row when only OpenUsage reports the subscription;
-anything else keeps provider `opencode`, so the free pool still fails closed
-when it has no telemetry of its own. `copilot` and `cline` are
-routable when usage-axi carries their windows. The selector's fixed
-five-provider set is deliberately **not** carried forward.
+to the legacy `opencode` row when only OpenUsage reports the subscription.
+A policy may instead declare `provider: "opencode-go"` directly for that Go
+pool; it cannot pair that identity with a free `opencode/` model. Anything else
+keeps provider `opencode`, so the free pool still fails closed when it has no
+telemetry of its own. `copilot` and `cline` are routable when usage-axi carries
+their windows. The selector's fixed five-provider set is deliberately **not**
+carried forward.
 
 **Pool pricing** uses the candidate's declared pool (policy `pools` plus
 `pool`/`quotaWindow`): cursor `auto_usage`/`api_usage`, agy
