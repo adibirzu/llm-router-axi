@@ -13,6 +13,7 @@ const NATIVE_PROVIDER: ReadonlyMap<string, string> = new Map([
   ["grok", "grok"],
   ["cursor", "cursor"],
   ["agy", "agy"],
+  ["opencode", "opencode"],
 ]);
 
 /**
@@ -121,7 +122,11 @@ type ProviderResolution = { provider: string } | { error: string };
 
 function resolveProvider(harness: string, provider: string): ProviderResolution {
   const native = NATIVE_PROVIDER.get(harness);
-  if (native && provider !== native) {
+  const nativeCompatible =
+    !native ||
+    provider === native ||
+    (harness === "opencode" && provider === OPENCODE_GO_TELEMETRY);
+  if (!nativeCompatible) {
     return { error: `native harness ${harness} requires provider ${native}` };
   }
   if (!provider) {
@@ -279,6 +284,13 @@ export function candidateToProfile(
     candidate.harness === "opencode" && resolved.provider === "opencode"
       ? opencodeTelemetryProvider(policy, candidate, quota)
       : resolved.provider;
+  if (
+    candidate.harness === "opencode" &&
+    provider === OPENCODE_GO_TELEMETRY &&
+    !isOpencodeGoCandidate(policy, candidate)
+  ) {
+    return { error: "provider opencode-go requires OpenCode Go pool" };
+  }
   const pool = resolvePool(policy, candidate, provider, quota);
   const profile: EngineProfile = {
     harness: candidate.harness,
@@ -290,6 +302,14 @@ export function candidateToProfile(
     ...(pool.poolLabel ? { poolLabel: pool.poolLabel } : {}),
   };
   return { profile };
+}
+
+function isOpencodeGoCandidate(policy: Policy, candidate: Candidate): boolean {
+  const pool = candidatePoolName(policy, candidate);
+  return (
+    (pool === policy.pools.opencode.go || pool === "go") &&
+    candidate.model?.startsWith("opencode-go/") === true
+  );
 }
 
 /** The human pool name a candidate draws on, for the decision's `pool` field. */
