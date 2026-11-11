@@ -32,6 +32,10 @@ function gauges(overrides: Partial<MachineGauges> = {}): MachineGauges {
     swapUsedPct: 5,
     swapouts: 0,
     suiteSlotFree: true,
+    llamaParallel: 2,
+    llamaSlotsTotal: 2,
+    llamaSlotsBusy: 0,
+    llamaSlotFree: true,
     ...overrides,
   };
 }
@@ -111,6 +115,31 @@ describe("capacity doctrine", () => {
     const off = cloneDefault();
     off.capacity.oneSuiteAtATime = false;
     expect(evaluateGauges(off, gauges({ suiteSlotFree: false }), "suite").ok).toBe(true);
+  });
+
+
+  it("refuses local-llm when every llama slot is busy and admits when one is free", () => {
+    const policy = cloneDefault();
+    const full = gauges({ llamaSlotsBusy: 2, llamaSlotsTotal: 2, llamaSlotFree: false });
+    const refused = evaluateGauges(policy, full, "local-llm");
+    expect(refused.ok).toBe(false);
+    expect(refused.reasons.join(" ")).toContain("llama slots are full");
+
+    const spawnStillOk = evaluateGauges(policy, full, "spawn");
+    expect(spawnStillOk.ok).toBe(true);
+
+    const free = gauges({ llamaSlotsBusy: 1, llamaSlotsTotal: 2, llamaSlotFree: true });
+    expect(evaluateGauges(policy, free, "local-llm").ok).toBe(true);
+  });
+
+  it("does not refuse local-llm on an unreadable llama probe", () => {
+    const policy = cloneDefault();
+    const unknown = gauges({
+      llamaSlotsBusy: null,
+      llamaSlotsTotal: null,
+      llamaSlotFree: null,
+    });
+    expect(evaluateGauges(policy, unknown, "local-llm").ok).toBe(true);
   });
 
   it("lets usage-axi machine{} override the local probe", () => {

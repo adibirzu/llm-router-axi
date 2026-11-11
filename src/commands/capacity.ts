@@ -11,9 +11,9 @@ const CAPACITY_FLAGS: FlagSpec[] = [
   { name: "--json", description: "Emit the gauges and verdict as JSON" },
   {
     name: "--for",
-    value: "spawn|suite",
+    value: "spawn|suite|local-llm",
     description:
-      "Admission purpose: spawn (default) never refuses on the suite slot; suite refuses when oneSuiteAtATime is true and it is occupied",
+      "Admission purpose: spawn (default) never refuses on the suite slot; suite refuses when oneSuiteAtATime is true and it is occupied; local-llm refuses when every llama.cpp parallel slot is busy",
   },
 ];
 
@@ -32,8 +32,9 @@ gauges: free memory percent, memory pressure level, swap in use, worker-root
         agent count, load per core, one-suite-at-a-time slot.
 inputs:
   check                verify only; exit 1 when the selected purpose would refuse
-  --for <spawn|suite>  admission purpose; spawn (default) ignores the suite slot
-                       for refusal, suite enforces oneSuiteAtATime
+  --for <spawn|suite|local-llm>  admission purpose; spawn (default) ignores the suite
+                       slot for refusal; suite enforces oneSuiteAtATime; local-llm
+                       refuses when both llama.cpp parallel slots are busy
   --json               emit {ok, measured, reasons, signals[]} as JSON
 flags[${CAPACITY_FLAGS.length + 1}]:
 ${CAPACITY_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}`).join(", ")}, --help
@@ -52,7 +53,7 @@ export async function capacityCommand(args: string[]): Promise<string> {
   const rest = verb ? args.slice(1) : args;
   const { values, booleans } = parseArgs("capacity", rest, CAPACITY_FLAGS);
   const purpose: CapacityPurpose =
-    requireEnum(values.get("--for"), "--for", ["spawn", "suite"] as const) ?? "spawn";
+    requireEnum(values.get("--for"), "--for", ["spawn", "suite", "local-llm"] as const) ?? "spawn";
 
   const read = loadEffectivePolicy();
   if (!read.ok) {
@@ -153,6 +154,15 @@ function signalRows(
           ? "free"
           : "free (context for spawn)",
       verdict: suiteEnforced ? status("one-suite") : "context",
+    },
+    {
+      signal: "llama slots",
+      measured:
+        gauges.llamaSlotsBusy === null || gauges.llamaSlotsTotal === null
+          ? "unknown"
+          : `${gauges.llamaSlotsBusy}/${gauges.llamaSlotsTotal} busy`,
+      wanted: `under ${settings.llamaParallel ?? gauges.llamaParallel ?? 2} (local-llm)`,
+      verdict: purpose === "local-llm" ? status("llama slots are full") : "context",
     },
   ];
 }

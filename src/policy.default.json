@@ -13,7 +13,8 @@
     "memoryFreeReservePercent": 10,
     "maxLoadPerCore": 2,
     "memoryPressureMax": "warn",
-    "maxSwapUsedPercent": null
+    "maxSwapUsedPercent": null,
+    "llamaParallel": 2
   },
   "pools": {
     "cursor": {
@@ -23,8 +24,14 @@
     },
     "agy": {
       "default": "gemini",
-      "gemini": ["gemini_5h", "gemini_weekly"],
-      "nonGemini": ["claude_gpt_5h", "claude_gpt_weekly"]
+      "gemini": [
+        "gemini_5h",
+        "gemini_weekly"
+      ],
+      "nonGemini": [
+        "claude_gpt_5h",
+        "claude_gpt_weekly"
+      ]
     },
     "opencode": {
       "default": "opencode-go",
@@ -39,20 +46,54 @@
   },
   "candidateGroups": {
     "architects": [
-      { "harness": "claude", "provider": "claude" },
-      { "harness": "codex", "provider": "codex" }
+      {
+        "harness": "claude",
+        "provider": "claude"
+      },
+      {
+        "harness": "codex",
+        "provider": "codex"
+      }
     ],
     "reviewers": [
-      { "harness": "grok", "provider": "grok" },
-      { "harness": "agy", "provider": "agy", "pool": "gemini" },
-      { "harness": "cursor", "provider": "cursor", "pool": "auto_usage" }
+      {
+        "harness": "grok",
+        "provider": "grok"
+      },
+      {
+        "harness": "agy",
+        "provider": "agy",
+        "pool": "gemini"
+      },
+      {
+        "harness": "cursor",
+        "provider": "cursor",
+        "pool": "auto_usage"
+      }
     ],
     "reviewers-escalated": [
-      { "harness": "grok", "provider": "grok" },
-      { "harness": "agy", "provider": "agy", "pool": "gemini" },
-      { "harness": "cursor", "provider": "cursor", "pool": "auto_usage" },
-      { "harness": "claude", "provider": "claude" },
-      { "harness": "codex", "provider": "codex" }
+      {
+        "harness": "grok",
+        "provider": "grok"
+      },
+      {
+        "harness": "agy",
+        "provider": "agy",
+        "pool": "gemini"
+      },
+      {
+        "harness": "cursor",
+        "provider": "cursor",
+        "pool": "auto_usage"
+      },
+      {
+        "harness": "claude",
+        "provider": "claude"
+      },
+      {
+        "harness": "codex",
+        "provider": "codex"
+      }
     ],
     "workers": [
       {
@@ -115,20 +156,38 @@
         "pool": "opencode",
         "model": "opencode/nemotron-3-ultra-free"
       },
-      { "harness": "grok", "provider": "grok" },
-      { "harness": "cursor", "provider": "cursor", "pool": "auto_usage" },
-      { "harness": "agy", "provider": "agy", "pool": "gemini" }
+      {
+        "harness": "grok",
+        "provider": "grok"
+      },
+      {
+        "harness": "cursor",
+        "provider": "cursor",
+        "pool": "auto_usage"
+      },
+      {
+        "harness": "agy",
+        "provider": "agy",
+        "pool": "gemini"
+      }
     ]
   },
   "modelFallback": {
-    "claude": ["sonnet", "opus", "haiku"],
+    "claude": [
+      "sonnet",
+      "opus",
+      "haiku"
+    ],
     "agy": [
       "gemini-3.8-flash",
       "gemini-3.7-flash",
       "gemini-3.6-flash",
       "gemini-2.5-flash"
     ],
-    "cursor": ["auto", "cursor-grok-4.6-high"],
+    "cursor": [
+      "auto",
+      "cursor-grok-4.6-high"
+    ],
     "opencode": [
       "opencode-go/deepseek-v4.1-flash",
       "opencode-go/muse-spark-1.3-contributor",
@@ -140,33 +199,119 @@
       "opencode/nemotron-3.5-lightning-free"
     ]
   },
-  "fallbackLanes": ["opencode", "grok", "cursor", "agy", "claude"],
-  "modelFallbackCycles": ["opencode", "cursor", "agy", "claude"],
+  "fallbackLanes": [
+    "opencode",
+    "grok",
+    "cursor",
+    "agy",
+    "claude"
+  ],
+  "modelFallbackCycles": [
+    "opencode",
+    "cursor",
+    "agy",
+    "claude"
+  ],
   "kinds": {
     "architecture": {
-      "easy": { "effort": "medium", "candidates": ["architects"] },
-      "medium": { "effort": "high", "candidates": ["architects"] },
-      "hard": { "effort": "high", "candidates": ["architects"] }
+      "easy": {
+        "effort": "medium",
+        "candidates": [
+          "architects"
+        ]
+      },
+      "medium": {
+        "effort": "high",
+        "candidates": [
+          "architects"
+        ]
+      },
+      "hard": {
+        "effort": "high",
+        "candidates": [
+          "architects"
+        ]
+      }
     },
     "admin": {
-      "easy": { "effort": "low", "candidates": ["architects"] },
-      "medium": { "effort": "medium", "candidates": ["architects"] },
-      "hard": { "effort": "high", "candidates": ["architects"] }
+      "easy": {
+        "effort": "low",
+        "candidates": [
+          "architects"
+        ]
+      },
+      "medium": {
+        "effort": "medium",
+        "candidates": [
+          "architects"
+        ]
+      },
+      "hard": {
+        "effort": "high",
+        "candidates": [
+          "architects"
+        ]
+      }
     },
     "review": {
-      "easy": { "effort": "low", "candidates": ["reviewers"] },
-      "medium": { "effort": "medium", "candidates": ["reviewers"] },
-      "hard": { "effort": "high", "candidates": ["reviewers-escalated"] }
+      "easy": {
+        "effort": "low",
+        "candidates": [
+          "reviewers"
+        ]
+      },
+      "medium": {
+        "effort": "medium",
+        "candidates": [
+          "reviewers"
+        ]
+      },
+      "hard": {
+        "effort": "high",
+        "candidates": [
+          "reviewers-escalated"
+        ]
+      }
     },
     "ship": {
-      "easy": { "effort": "low", "candidates": ["workers"] },
-      "medium": { "effort": "medium", "candidates": ["workers"] },
-      "hard": { "effort": "high", "candidates": ["workers"] }
+      "easy": {
+        "effort": "low",
+        "candidates": [
+          "workers"
+        ]
+      },
+      "medium": {
+        "effort": "medium",
+        "candidates": [
+          "workers"
+        ]
+      },
+      "hard": {
+        "effort": "high",
+        "candidates": [
+          "workers"
+        ]
+      }
     },
     "scout": {
-      "easy": { "effort": "low", "candidates": ["workers"] },
-      "medium": { "effort": "medium", "candidates": ["workers"] },
-      "hard": { "effort": "high", "candidates": ["workers"] }
+      "easy": {
+        "effort": "low",
+        "candidates": [
+          "workers"
+        ]
+      },
+      "medium": {
+        "effort": "medium",
+        "candidates": [
+          "workers"
+        ]
+      },
+      "hard": {
+        "effort": "high",
+        "candidates": [
+          "workers"
+        ]
+      }
     }
   }
 }
