@@ -99,6 +99,10 @@ export interface Cooldown {
   until: number;
   reason: string;
   recordedAt: number;
+  /** ISO time of the observed 429/quota signal; present on 429-derived cooldowns. */
+  at?: string;
+  /** True while a 429-derived cooldown doubles the effective reserve. */
+  suspect?: boolean;
 }
 
 export interface EngineState {
@@ -120,6 +124,8 @@ export interface CandidateEvaluation {
   /** Bare frozen reason string (no `candidate provider=…` prefix). */
   detail: string;
   spendPriority: number | null;
+  /** `429 at <iso>` for a lane skipped by a 429-derived cooldown. */
+  cooldown?: string;
 }
 
 export interface SelectionReport {
@@ -199,16 +205,17 @@ function reserveVerdict(
   headroom: number,
   basis: string,
   settings: EngineSettings,
+  reserve: number = settings.reservePercent,
 ): { eligible: boolean; reason: string } {
-  if (headroom <= settings.reservePercent) {
+  if (headroom <= reserve) {
     return {
       eligible: false,
-      reason: `${basis} headroom ${headroom}% is at or below ${settings.reservePercent}% reserve`,
+      reason: `${basis} headroom ${headroom}% is at or below ${reserve}% reserve`,
     };
   }
   return {
     eligible: true,
-    reason: `fresh ${basis} headroom=${headroom}% reserve=${settings.reservePercent}%`,
+    reason: `fresh ${basis} headroom=${headroom}% reserve=${reserve}%`,
   };
 }
 
@@ -251,6 +258,7 @@ function providerReadiness(
 function priceProviderWide(
   provider: QuotaProvider,
   settings: EngineSettings,
+  reserve: number,
 ): { eligible: boolean; reason: string } {
   const values: number[] = [];
   for (const window of provider.windows ?? []) {
@@ -264,7 +272,7 @@ function priceProviderWide(
       values.push(availability.effectivePercentRemaining);
     }
   }
-  return reserveVerdict(Math.min(...values), "quota", settings);
+  return reserveVerdict(Math.min(...values), "quota", settings, reserve);
 }
 
 interface PoolPricing {
@@ -279,6 +287,7 @@ function priceDeclaredPool(
   windowIds: string[],
   label: string | undefined,
   settings: EngineSettings,
+  reserve: number,
 ): PoolPricing {
   const primary = label ?? windowIds[0] ?? "";
   const windows = windowIds
@@ -306,7 +315,7 @@ function priceDeclaredPool(
     }
   }
   const basis = `window ${tightest.id}`;
-  const verdict = reserveVerdict(tightest.percentRemaining as number, basis, settings);
+  const verdict = reserveVerdict(tightest.percentRemaining as number, basis, settings, reserve);
   return { ...verdict, windowId: tightest.id ?? windowIds[0] ?? null };
 }
 
@@ -314,18 +323,19 @@ function priceCandidate(
   provider: QuotaProvider,
   profile: EngineProfile,
   settings: EngineSettings,
+  reserve: number,
 ): PoolPricing {
   const windows = profile.poolWindows;
   if (windows && windows.length > 0) {
     if (windows.length === 1) {
-      return priceDeclaredPool(provider, windows, undefined, settings);
+      return priceDeclaredPool(provider, windows, undefined, settings, reserve);
     }
-    return priceDeclaredPool(provider, windows, profile.poolLabel, settings);
+    return priceDeclaredPool(provider, windows, profile.poolLabel, settings, reserve);
   }
   if (profile.quotaWindow) {
-    return priceDeclaredPool(provider, [profile.quotaWindow], undefined, settings);
+    return priceDeclaredPool(provider, [profile.quotaWindow], undefined, settings, reserve);
   }
-  const wide = priceProviderWide(provider, settings);
+  const wide = priceProviderWide(provider, settings, reserve);
   return { ...wide, windowId: null };
 }
 
@@ -376,14 +386,42 @@ function cooldownActive(state: EngineState, provider: string, now: number): Cool
   return latest;
 }
 
+/** The most recent stored entry for a provider, active or just expired. */
+function storedCooldown(state: EngineState, provider: string): Cooldown | null {
+  let latest: Cooldown | null = null;
+  for (const key of cooldownKeys(provider)) {
+    const item = state.cooldowns[key];
+    if (item && Number.isInteger(item.until) && (!latest || item.until > latest.until)) {
+      latest = item;
+    }
+  }
+  return latest;
+}
+
 export function setCooldown(
   state: EngineState,
   provider: string,
   reason: string,
   now: number,
   seconds: number,
+  observedAt?: string,
 ): void {
-  state.cooldowns[provider] = { until: now + seconds, reason, recordedAt: now };
+  state.cooldowns[provider] = {
+    until: now + seconds,
+    reason,
+    recordedAt: now,
+    ...(observedAt ? { at: observedAt, suspect: true } : {}),
+  };
+}
+
+/** The ISO form of an epoch second, stored with a 429-derived cooldown. */
+export function isoTime(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toISOString();
+}
+
+/** The `429 at <iso>` explain line for a 429-derived cooldown, if any. */
+function cooldownLine(cooldown: Cooldown): string | undefined {
+  return cooldown.at ? `429 at ${cooldown.at}` : undefined;
 }
 
 function tieKey(home: string, value: string): string {
@@ -444,6 +482,7 @@ export function selectProfiles(params: {
   for (const [provider, providerProfiles] of byProvider) {
     const cooldown = cooldownActive(state, provider, now);
     if (cooldown) {
+      const line = cooldownLine(cooldown);
       for (const profile of providerProfiles) {
         evaluations.push({
           profile,
@@ -451,15 +490,16 @@ export function selectProfiles(params: {
           windowId: profile.quotaWindow ?? null,
           eligible: false,
           reason: `candidate provider=${provider} unavailable: cooldown until epoch ${cooldown.until}`,
-          detail: `candidate provider=${provider} unavailable: cooldown until epoch ${cooldown.until}`,
+          detail: line ?? `candidate provider=${provider} unavailable: cooldown until epoch ${cooldown.until}`,
           spendPriority: null,
+          ...(line ? { cooldown: line } : {}),
         });
       }
       continue;
     }
     const readiness = providerReadiness(provider, quota, now, settings);
     if (readiness.cooldownEvidence) {
-      setCooldown(state, provider, "quota-telemetry-evidence", now, settings.cooldownSeconds);
+      setCooldown(state, provider, "quota-telemetry-evidence", now, settings.cooldownSeconds, isoTime(now));
     }
     if (!readiness.ok || !readiness.provider) {
       const reason = `candidate provider=${provider} unavailable: ${readiness.reason}`;
@@ -477,12 +517,26 @@ export function selectProfiles(params: {
       continue;
     }
 
+    // A suspect 429 window doubles the effective reserve while the 429-derived
+    // cooldown is in force; the first fresh non-429 read after it agrees and
+    // clears the flag, so the normal reserve is restored from then on.
+    const stored = storedCooldown(state, provider);
+    const reserve = stored?.suspect === true
+      ? settings.reservePercent * 2
+      : settings.reservePercent;
+    if (readiness.ok) {
+      for (const key of cooldownKeys(provider)) {
+        const item = state.cooldowns[key];
+        if (item?.suspect === true) state.cooldowns[key] = { ...item, suspect: false };
+      }
+    }
+
     const priced = new Map<string, PoolPricing>();
     const eligible: EngineProfile[] = [];
     for (const profile of providerProfiles) {
       const poolKey = poolIdentity(profile);
       if (!priced.has(poolKey)) {
-        priced.set(poolKey, priceCandidate(readiness.provider, profile, settings));
+        priced.set(poolKey, priceCandidate(readiness.provider, profile, settings, reserve));
       }
       const verdict = priced.get(poolKey) as PoolPricing;
       const label = describePool(provider, profile);

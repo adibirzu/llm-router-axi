@@ -4,7 +4,7 @@ import { parseArgs, requireEnum, requireInteger, type FlagSpec } from "../args.j
 import { appendLedgerRow, JEV_FREEZE } from "../jev/shadow.js";
 import { loadEffectivePolicy } from "../policy/index.js";
 import { collapseHome, helpBlock, toon } from "../render.js";
-import { cooldownKeys, setCooldown } from "../selector.js";
+import { cooldownKeys, classifyEvidence, isoTime, setCooldown } from "../selector.js";
 import { dispatchStatePath, loadState, saveState, withStateLock } from "../state.js";
 
 const OUTCOME_VALUES = ["rate_limit", "ok"] as const;
@@ -31,7 +31,8 @@ inputs:
   --task <id>                task id for the receipt
   --now <epoch>              fix the current epoch second (test seam)
 outputs:
-  TOON receipt: provider, outcome, task, cooldownUntil (rate_limit only), statePath
+  TOON receipt: provider, outcome, task, cooldownUntil (rate_limit only),
+    cooldown ("429 at <iso>", rate_limit only), statePath
   --json  the same receipt as JSON
 state:
   ~/.local/state/llm-router-axi   cooldown + least-recent-use ledger
@@ -90,16 +91,22 @@ export async function recordCommand(args: string[]): Promise<string> {
   });
 
   const statePath = dispatchStatePath();
+  // The record outcome is read with the shared classify-evidence depletion
+  // vocabulary, so the receipt, the cooldown, and `classify-evidence` can
+  // never disagree about what counts as a 429/quota signal.
+  const depleted = outcome === "rate_limit" || classifyEvidence(outcome as string) !== null;
   const receipt = withStateLock(() => {
     const state = loadState();
-    if (outcome === "rate_limit") {
-      setCooldown(state, provider as string, "recorded-rate-limit-or-quota-failure", recordedAt, cooldownSeconds);
+    if (depleted) {
+      const observedAt = isoTime(recordedAt);
+      setCooldown(state, provider as string, "recorded-rate-limit-or-quota-failure", recordedAt, cooldownSeconds, observedAt);
       saveState(state);
       return {
         provider,
         outcome,
         task,
         cooldownUntil: state.cooldowns[provider as string]?.until ?? null,
+        cooldown: `429 at ${observedAt}`,
         statePath: collapseHome(statePath),
       };
     }

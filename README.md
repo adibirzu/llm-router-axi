@@ -98,8 +98,16 @@ llm-router-axi shadow report
   `~/.local/state/llm-router-axi/override-audit.jsonl`.
 - `explain` shows each candidate (with its 1-based chain rank) and why it was
   accepted or rejected, reusing the firstmate selector's frozen rejection strings.
+  A lane skipped by a 429-derived cooldown carries an extra
+  `cooldown: "429 at <iso>"` line beside its cooldown reason.
 - `record` feeds rate-limit outcomes back into cooldown and least-recent-use
-  state under `~/.local/state/llm-router-axi`.
+  state under `~/.local/state/llm-router-axi`. A recorded `rate_limit` opens a
+  429-derived cooldown immediately (`cooldown: "429 at <iso>"` in the receipt)
+  and the next `route`/`select` skip that lane exactly like a below-reserve
+  refusal. While the last usage read still shows positive headroom for that
+  window, it stays marked *suspect*: the effective reserve doubles until the
+  next fresh non-429 read for the same window agrees, which clears the suspect
+  flag and restores the normal reserve.
 - `capacity [check] [--for <spawn|suite|local-llm>]` reports the machine gauges
   (including llama.cpp parallel slots busy/total for the adi1 local-Qwen
   fleet) and policy verdict. Spawn admission (the default, and all `route`

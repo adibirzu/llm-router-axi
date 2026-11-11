@@ -216,6 +216,7 @@ export function candidateRows(result: RouterResult): Array<Record<string, unknow
       model: route.profile.model ?? "harness-default",
       decision: evaluation?.eligible ? "eligible" : "refused",
       reason: evaluation?.reason ?? "not evaluated",
+      ...(evaluation?.cooldown ? { cooldown: evaluation.cooldown } : {}),
     };
   });
 }

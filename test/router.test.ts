@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -619,5 +619,128 @@ describe("record", () => {
     };
     const codex = report.candidates.find((row) => row.provider === "codex");
     expect(codex?.reason).not.toContain("cooldown until epoch");
+  });
+});
+
+describe("429-derived cooldown", () => {
+  const OBSERVED = "1970-01-01T00:16:40.000Z"; // epoch second 1000
+  const FRESH_STAMP = "1970-01-01T00:16:41.000Z"; // epoch second 1001
+  const AFTER_STAMP = "1970-01-01T00:46:41.000Z"; // epoch second 2801
+
+  function twoProviderPolicy(): void {
+    const policy = cloneDefault();
+    policy.kinds.ship.medium.candidates = [
+      { harness: "claude", provider: "claude" },
+      { harness: "codex", provider: "codex" },
+    ];
+    writePolicy(policy);
+  }
+
+  it("makes the next route skip the lane the 429 was recorded for", async () => {
+    twoProviderPolicy();
+    const usageFile = writeJson(
+      "usage.json",
+      usage({
+        providers: [fresh("claude", 80), fresh("codex", 80)],
+        generatedAt: FRESH_STAMP,
+      }),
+    );
+
+    const record = await run([
+      "record", "--provider", "codex", "--outcome", "rate_limit", "--task", "t-42", "--now", "1000", "--json",
+    ]);
+    expect(record.exitCode).toBe(0);
+    const receipt = JSON.parse(record.output) as { cooldownUntil: number; cooldown: string };
+    expect(receipt.cooldownUntil).toBe(2800);
+    expect(receipt.cooldown).toBe(`429 at ${OBSERVED}`);
+
+    const route = await run([
+      "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--now", "1001", "--json",
+    ]);
+    expect(route.exitCode).toBe(0);
+    const decision = JSON.parse(route.output) as { provider: string; fallbacks: unknown[] };
+    expect(decision.provider).toBe("claude");
+    expect(decision.fallbacks).toHaveLength(0);
+  });
+
+  it("prints the cooldown line beside the frozen cooldown reason in explain", async () => {
+    twoProviderPolicy();
+    const usageFile = writeJson(
+      "usage.json",
+      usage({
+        providers: [fresh("claude", 80), fresh("codex", 80)],
+        generatedAt: FRESH_STAMP,
+      }),
+    );
+    await run([
+      "record", "--provider", "codex", "--outcome", "rate_limit", "--task", "t-42", "--now", "1000",
+    ]);
+
+    const json = await run([
+      "explain", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--now", "1001", "--json",
+    ]);
+    const report = JSON.parse(json.output) as {
+      candidates: Array<{ provider: string; reason: string; cooldown?: string }>;
+    };
+    const codex = report.candidates.find((row) => row.provider === "codex");
+    expect(codex?.reason).toContain("cooldown until epoch 2800");
+    expect(codex?.cooldown).toBe(`429 at ${OBSERVED}`);
+
+    const toonOut = await run([
+      "explain", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--now", "1001",
+    ]);
+    expect(toonOut.output).toContain(`cooldown: "429 at ${OBSERVED}"`);
+  });
+
+  it("doubles the effective reserve while the 429 window is suspect", async () => {
+    const policy = cloneDefault();
+    policy.kinds.ship.medium.candidates = [{ harness: "claude", provider: "claude" }];
+    writePolicy(policy);
+    const usageFile = writeJson(
+      "usage.json",
+      usage({ providers: [fresh("claude", 30)], generatedAt: AFTER_STAMP }),
+    );
+
+    await run([
+      "record", "--provider", "claude", "--outcome", "rate_limit", "--task", "t-1", "--now", "1000",
+    ]);
+    // Cooldown expired at 2800, but the suspect flag still doubles the reserve
+    // on the first fresh read after it: 30% is refused against 2x20% = 40%.
+    const doubled = await run([
+      "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--now", "2801",
+    ]);
+    expect(doubled.exitCode).toBe(1);
+    expect(doubled.output).toContain("quota headroom 30% is at or below 40% reserve");
+  });
+
+  it("clears the suspect flag on the next fresh non-429 read", async () => {
+    const policy = cloneDefault();
+    policy.kinds.ship.medium.candidates = [{ harness: "claude", provider: "claude" }];
+    writePolicy(policy);
+    const usageFile = writeJson(
+      "usage.json",
+      usage({ providers: [fresh("claude", 30)], generatedAt: AFTER_STAMP }),
+    );
+
+    await run([
+      "record", "--provider", "claude", "--outcome", "rate_limit", "--task", "t-1", "--now", "1000",
+    ]);
+    await run([
+      "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--now", "2801",
+    ]);
+
+    // The fresh read above agreed, so the normal 20% reserve is restored: 30% wins.
+    const restored = await run([
+      "route", "--kind", "ship", "--difficulty", "medium", "--usage-json", usageFile, "--now", "2802", "--json",
+    ]);
+    expect(restored.exitCode).toBe(0);
+    const decision = JSON.parse(restored.output) as { reason: string };
+    expect(decision.reason).toContain("headroom=30%");
+    expect(decision.reason).toContain("reserve=20%");
+
+    const ledger = JSON.parse(
+      readFileSync(join(dir, "state", "llm-router-axi", "dispatch-routing.json"), "utf8"),
+    ) as { cooldowns: Record<string, { suspect?: boolean }> };
+    expect(ledger.cooldowns.claude?.suspect).toBe(false);
   });
 });
