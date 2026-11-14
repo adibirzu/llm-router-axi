@@ -1,6 +1,6 @@
 {
   "name": "llm-router-axi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AXI: policy-driven LLM router that turns a task descriptor plus live usage into one harness/model/effort decision with fallback chain and spawn flags",
   "type": "module",
   "repository": {

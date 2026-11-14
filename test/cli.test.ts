@@ -189,7 +189,7 @@ describe("top-level surface", () => {
   it("prints the version", async () => {
     const { output, exitCode } = await run(["--version"]);
     expect(exitCode).toBe(0);
-    expect(output.trim()).toBe("0.1.0");
+    expect(output.trim()).toBe("0.1.1");
   });
 
   it("prints top-level help", async () => {
