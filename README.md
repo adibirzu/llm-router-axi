@@ -113,7 +113,7 @@ llm-router-axi shadow report
   fleet) and policy verdict. Spawn admission (the default, and all `route`
   uses) never refuses because a suite is running or a llama slot is busy;
   `--for suite` is the suite-start gate that refuses when the number of running
-  test suites reaches `capacity.maxConcurrentSuites` (integer 1-8, default 1;
+  test suites reaches `capacity.maxConcurrentSuites` (integer 1-32, default 1;
   the count is one per suite run, not per child worker, and `capacity` reports
   both the count and the limit; the legacy `oneSuiteAtATime` means 1 when true
   and no cap when false, and only applies when `maxConcurrentSuites` is absent);
@@ -124,6 +124,11 @@ llm-router-axi shadow report
   agent launch calls, and refuses when every configured `capacity.llamaParallel`
   slot is busy. `check`, `--for suite`, and `--for local-llm` exit `1` when the
   selected purpose would refuse.
+
+  Capacity ceilings accept these documented bounds: `agentCeiling` 1-256,
+  `maxConcurrentSuites` 1-32, `maxLoadPerCore` 0-128, and `llamaParallel` 1-64.
+  The shipped default policy keeps conservative values; raise them only in a
+  user policy on a host that has the headroom.
 
 **Chain rank beats raw headroom.** The lane's declared candidate order is the
 primary rank (1-based). The lowest-ranked *eligible* candidate wins, so an

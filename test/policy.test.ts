@@ -211,18 +211,42 @@ describe("malformed policy refusal", () => {
     }
   });
 
-  it("bounds capacity.maxConcurrentSuites to an integer from 1 to 8 and keeps it optional", () => {
+  it("bounds capacity.maxConcurrentSuites to an integer from 1 to 32 and keeps it optional", () => {
     const withLimit = (value: unknown) => {
       const policy = cloneDefault() as { capacity: Record<string, unknown> };
       policy.capacity.maxConcurrentSuites = value;
       return validatePolicy(policy);
     };
-    for (const ok of [1, 3, 8]) expect(withLimit(ok).ok).toBe(true);
-    for (const bad of [0, 9, -1, 1.5, "3", null]) expect(withLimit(bad).ok).toBe(false);
+    for (const ok of [1, 3, 8, 32]) expect(withLimit(ok).ok).toBe(true);
+    for (const bad of [0, 33, -1, 1.5, "3", null]) expect(withLimit(bad).ok).toBe(false);
 
     const legacy = cloneDefault() as { capacity: Record<string, unknown> };
     delete legacy.capacity.maxConcurrentSuites;
     expect(validatePolicy(legacy).ok).toBe(true);
+  });
+
+  it("admits high-capacity workstation ceilings up to the documented bounds", () => {
+    const withCapacity = (capacity: Record<string, unknown>) => {
+      const policy = cloneDefault() as { capacity: Record<string, unknown> };
+      Object.assign(policy.capacity, capacity);
+      return validatePolicy(policy);
+    };
+    for (const agentCeiling of [128, 256]) expect(withCapacity({ agentCeiling }).ok).toBe(true);
+    for (const maxLoadPerCore of [96, 128]) expect(withCapacity({ maxLoadPerCore }).ok).toBe(true);
+    for (const maxConcurrentSuites of [16, 32]) expect(withCapacity({ maxConcurrentSuites }).ok).toBe(true);
+    for (const llamaParallel of [32, 64]) expect(withCapacity({ llamaParallel }).ok).toBe(true);
+  });
+
+  it("refuses capacity ceilings above the documented bounds", () => {
+    const withCapacity = (capacity: Record<string, unknown>) => {
+      const policy = cloneDefault() as { capacity: Record<string, unknown> };
+      Object.assign(policy.capacity, capacity);
+      return validatePolicy(policy);
+    };
+    expect(withCapacity({ agentCeiling: 257 }).ok).toBe(false);
+    expect(withCapacity({ maxLoadPerCore: 129 }).ok).toBe(false);
+    expect(withCapacity({ maxConcurrentSuites: 33 }).ok).toBe(false);
+    expect(withCapacity({ llamaParallel: 65 }).ok).toBe(false);
   });
 
   it("refuses a cyclic lane whose chain has fewer than two models", () => {

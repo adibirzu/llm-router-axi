@@ -108,6 +108,21 @@ describe("policy lifecycle", () => {
     expect(output).toContain("/routing/reservePercent");
   });
 
+  it("validates a high-capacity workstation policy and refuses ceilings above it", async () => {
+    const raised = JSON.parse(JSON.stringify(readDefaultPolicy())) as { capacity: Record<string, unknown> };
+    Object.assign(raised.capacity, { agentCeiling: 256, maxLoadPerCore: 128, maxConcurrentSuites: 32, llamaParallel: 64 });
+    const ok = join(dir, "raised-policy.json");
+    writeFileSync(ok, JSON.stringify(raised));
+    expect((await run(["policy", "validate", "--file", ok])).exitCode).toBe(0);
+
+    raised.capacity.agentCeiling = 257;
+    const over = join(dir, "over-policy.json");
+    writeFileSync(over, JSON.stringify(raised));
+    const { output, exitCode } = await run(["policy", "validate", "--file", over]);
+    expect(exitCode).toBe(2);
+    expect(output).toContain("/capacity/agentCeiling");
+  });
+
   it("rejects an unknown policy subcommand with exit 2", async () => {
     const { output, exitCode } = await run(["policy", "frobnicate"]);
     expect(exitCode).toBe(2);
