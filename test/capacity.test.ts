@@ -96,6 +96,34 @@ describe("capacity doctrine", () => {
     expect(evaluateGauges(policy, gauges({ agents: 10 })).ok).toBe(false);
   });
 
+  it("admits a high-capacity workstation below its raised ceilings", () => {
+    const policy = cloneDefault();
+    policy.capacity.agentCeiling = 256;
+    policy.capacity.maxLoadPerCore = 128;
+    policy.capacity.maxConcurrentSuites = 32;
+    policy.capacity.llamaParallel = 64;
+    const verdict = evaluateGauges(policy, gauges({ agents: 200, loadPerCore: 96, suiteCount: 16, llamaParallel: 64, llamaSlotsTotal: 64, llamaSlotsBusy: 10 }));
+    expect(verdict.ok).toBe(true);
+    expect(evaluateGauges(policy, gauges({ agents: 256 })).ok).toBe(false);
+    expect(evaluateGauges(policy, gauges({ loadPerCore: 128.5 })).ok).toBe(false);
+  });
+
+  it("gates suite starts at the raised maxConcurrentSuites boundary", () => {
+    const policy = cloneDefault();
+    policy.capacity.maxConcurrentSuites = 32;
+    expect(evaluateGauges(policy, gauges({ suiteCount: 31 }), "suite").ok).toBe(true);
+    expect(evaluateGauges(policy, gauges({ suiteCount: 32 }), "suite").ok).toBe(false);
+  });
+
+  it("gates local-llm starts at the raised llamaParallel boundary", () => {
+    const policy = cloneDefault();
+    policy.capacity.llamaParallel = 64;
+    const slots = (busy: number) =>
+      gauges({ llamaSlotsTotal: 64, llamaSlotsBusy: busy, llamaSlotFree: busy < 64 });
+    expect(evaluateGauges(policy, slots(63), "local-llm").ok).toBe(true);
+    expect(evaluateGauges(policy, slots(64), "local-llm").ok).toBe(false);
+  });
+
   it("keeps the occupied suite slot as spawn context but refuses a suite start", () => {
     const policy = cloneDefault();
     const occupied = gauges({ suiteSlotFree: false, suiteCount: 1 });

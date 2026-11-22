@@ -55,7 +55,7 @@ Top-level keys (all required; unknown keys are refused):
 |---|---|
 | `version` | Schema version, currently `1`. |
 | `routing` | `reservePercent` (20), `cooldownSeconds` (1800), `telemetryMaxAgeSeconds` (300), `maxFallbacks` (4). |
-| `capacity` | `agentCeiling` (10), `oneSuiteAtATime` (true, legacy alias), `maxConcurrentSuites` (1), `memoryFreeReservePercent` (**10**), `maxLoadPerCore` (2), `memoryPressureMax` (`warn`), `maxSwapUsedPercent` (`null`). |
+| `capacity` | `agentCeiling` (10, 1-256), `oneSuiteAtATime` (true, legacy alias), `maxConcurrentSuites` (1, 1-32), `memoryFreeReservePercent` (**10**), `maxLoadPerCore` (2, 0-128), `llamaParallel` (2, 1-64), `memoryPressureMax` (`warn`), `maxSwapUsedPercent` (`null`). The bounds are the schema ceilings; the shipped default keeps conservative values. |
 | `pools` | Split-pool window ids: cursor `auto_usage`/`api_usage`, agy `gemini_5h`/`gemini_weekly` vs `claude_gpt_5h`/`claude_gpt_weekly`, opencode `opencode-go`/`opencode`. |
 | `spendPriority` | `weight`, `tieBreaker` (`least-recent-use` \| `declared-order`), `preferKnown`. |
 | `candidateGroups` | Named, ordered candidate lists. |
@@ -230,7 +230,7 @@ pressure level, optional swap ceiling, and the running test-suite count. The
 suite cap is an admission purpose, not a blanket refusal: a `spawn` verdict (the
 default, and the only one `route` uses) never refuses because a suite is running
 and keeps the count as context, while a `suite` verdict (`capacity --for suite`)
-refuses when the running suite count reaches `maxConcurrentSuites` (1-8, default
+refuses when the running suite count reaches `maxConcurrentSuites` (1-32, default
 1). The count is one per suite root: a test runner whose ancestor is also a test
 runner (`npm test` -> `sh -c vitest` -> `node vitest`) belongs to that run and is
 not counted twice. `oneSuiteAtATime` stays as a legacy alias that only applies
