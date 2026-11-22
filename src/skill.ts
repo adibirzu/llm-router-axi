@@ -106,7 +106,7 @@ uses) never refuses because a test suite is running or a llama slot is busy;
 \`capacity --for suite\` is the gate a suite start calls, and it refuses when the
 running suite count (one per run, not per child process) reaches
 \`maxConcurrentSuites\` (default 1; the legacy \`oneSuiteAtATime\` true means 1,
-false means no cap, and \`maxConcurrentSuites\` wins when both are set);
+false means no cap, and \`maxConcurrentSuites\` wins when both are set; the schema bounds are \`agentCeiling\` 1-256, \`maxConcurrentSuites\` 1-32, \`maxLoadPerCore\` 0-128, \`llamaParallel\` 1-64);
 \`capacity --for local-llm\`
 is the gate a local-Qwen agent launch on adi1 calls, and it refuses when every
 configured \`llamaParallel\` slot is busy (probed from

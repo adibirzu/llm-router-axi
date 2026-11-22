@@ -79,7 +79,7 @@ export const POLICY_SCHEMA = {
         agentCeiling: {
           type: "integer",
           minimum: 1,
-          maximum: 64,
+          maximum: 256,
           description:
             "Machine-wide agent ceiling; the router refuses to route when the fleet is at or above it.",
         },
@@ -91,7 +91,7 @@ export const POLICY_SCHEMA = {
         maxConcurrentSuites: {
           type: "integer",
           minimum: 1,
-          maximum: 8,
+          maximum: 32,
           description:
             "How many test suites may run at once (default 1). capacity --for suite refuses when that many are already running; spawn admission never does.",
         },
@@ -105,7 +105,7 @@ export const POLICY_SCHEMA = {
         maxLoadPerCore: {
           type: "number",
           minimum: 0,
-          maximum: 64,
+          maximum: 128,
           description: "Maximum 1-minute load per core before routing refuses.",
         },
         memoryPressureMax: {
@@ -123,7 +123,7 @@ export const POLICY_SCHEMA = {
         llamaParallel: {
           type: "integer",
           minimum: 1,
-          maximum: 16,
+          maximum: 64,
           description:
             "Configured llama.cpp --parallel ceiling for the local qwen fleet (default 2). Enforced only for capacity --for local-llm.",
         },
