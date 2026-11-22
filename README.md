@@ -128,7 +128,9 @@ llm-router-axi shadow report
   Capacity ceilings accept these documented bounds: `agentCeiling` 1-256,
   `maxConcurrentSuites` 1-32, `maxLoadPerCore` 0-128, and `llamaParallel` 1-64.
   The shipped default policy keeps conservative values; raise them only in a
-  user policy on a host that has the headroom.
+  user policy on a host that has the headroom. For `--for local-llm`, the slot
+  total comes from the live llama.cpp `/slots` probe when it reports one, and
+  `llamaParallel` is used only as the fallback total when the probe does not.
 
 **Chain rank beats raw headroom.** The lane's declared candidate order is the
 primary rank (1-based). The lowest-ranked *eligible* candidate wins, so an
