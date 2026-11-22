@@ -38,14 +38,27 @@
   "spendPriority": {
     "weight": 1,
     "tieBreaker": "least-recent-use",
-    "preferKnown": true
+    "preferKnown": true,
+    "preferExpiring": true
   },
   "jev": {
     "shadow": {
       "enabled": false
     }
   },
+  "projects": {
+    "harness-library": { "candidateGroup": "priority-projects", "preferExpiring": false },
+    "roel-hermes": { "candidateGroup": "priority-projects", "preferExpiring": false },
+    "rkm-transport-bot": { "candidateGroup": "priority-projects", "preferExpiring": false },
+    "transport-management": { "candidateGroup": "priority-projects", "preferExpiring": false },
+    "rkm-trans": { "candidateGroup": "priority-projects", "preferExpiring": false }
+  },
   "candidateGroups": {
+    "priority-projects": [
+      { "harness": "codex", "provider": "codex", "model": "gpt-6.2-sol" },
+      { "harness": "claude", "provider": "claude" },
+      { "harness": "agy", "provider": "agy", "pool": "gemini" }
+    ],
     "architects": [
       { "harness": "claude", "provider": "claude" },
       { "harness": "codex", "provider": "codex" }

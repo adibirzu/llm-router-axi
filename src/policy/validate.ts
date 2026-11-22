@@ -118,18 +118,29 @@ function checkGroupReferences(policy: Policy): PolicyIssue[] {
   const issues: PolicyIssue[] = [];
   const groups = new Set(Object.keys(policy.candidateGroups));
 
+  function checkReference(entry: unknown, path: string): void {
+    if (typeof entry === "string" && !groups.has(entry)) {
+      issues.push({
+        path,
+        message: `references unknown candidate group "${entry}" (declare it under candidateGroups)`,
+      });
+    }
+  }
+
   for (const [kind, lanes] of Object.entries(policy.kinds)) {
     for (const difficulty of ["easy", "medium", "hard"] as const) {
       const lane = lanes[difficulty];
       lane.candidates.forEach((entry, index) => {
-        if (typeof entry === "string" && !groups.has(entry)) {
-          issues.push({
-            path: `/kinds/${kind}/${difficulty}/candidates/${index}`,
-            message: `references unknown candidate group "${entry}" (declare it under candidateGroups)`,
-          });
-        }
+        checkReference(entry, `/kinds/${kind}/${difficulty}/candidates/${index}`);
       });
     }
+  }
+
+  for (const [slug, project] of Object.entries(policy.projects ?? {})) {
+    checkReference(project.candidateGroup, `/projects/${slug}/candidateGroup`);
+    project.candidates?.forEach((entry, index) => {
+      checkReference(entry, `/projects/${slug}/candidates/${index}`);
+    });
   }
 
   return issues;

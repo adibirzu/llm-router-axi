@@ -19,7 +19,7 @@ inputs:
   --surface <backend|frontend|docs|infra|mixed>
   --size <changed-lines>   optional size hint
   --needs <a,b,c>          optional capability needs
-  --project <name>         optional project scope
+  --project <name>         optional project policy slug
   --usage-json <path>      usage telemetry fixture instead of usage-axi
   --now <epoch>            fix the current epoch second (test seam)
   --json                   emit the same table as JSON
@@ -60,10 +60,12 @@ export async function explainCommand(args: string[]): Promise<string> {
     );
   }
 
+  const project = values.get("--project");
   const usageJson = values.get("--usage-json");
   const evaluation = evaluateDescriptor({
     kind: kind as (typeof KIND_VALUES)[number],
     difficulty: difficulty as (typeof DIFFICULTY_VALUES)[number],
+    ...(project !== undefined ? { project } : {}),
     ...(usageJson ? { usageJson } : {}),
     ...(now !== undefined ? { now } : {}),
   });
@@ -84,6 +86,7 @@ export async function explainCommand(args: string[]): Promise<string> {
       kind,
       difficulty,
       now: evaluation.now,
+      ...(project !== undefined ? { project } : {}),
     },
     selected,
     reason: result.decision?.reason ?? result.report.reason ?? null,

@@ -194,6 +194,10 @@ export const POLICY_SCHEMA = {
             "Multiplier applied to a known spendPriority score before ranking.",
         },
         tieBreaker: { enum: ["least-recent-use", "declared-order"] },
+        preferExpiring: {
+          type: "boolean",
+          description: "For route and explain, prefer candidates whose quota windows reset sooner.",
+        },
         preferKnown: {
           type: "boolean",
           description:
@@ -211,6 +215,12 @@ export const POLICY_SCHEMA = {
       },
       description:
         "Named, ordered candidate lists. Lanes reference a group by name so the worker/reviewer/architect doctrine is declared once.",
+    },
+    projects: {
+      type: "object",
+      propertyNames: { pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+      additionalProperties: { $ref: "#/definitions/projectRouting" },
+      description: "Optional routing preferences keyed by exact project slug.",
     },
     jev: {
       type: "object",
@@ -305,24 +315,40 @@ export const POLICY_SCHEMA = {
         },
       },
     },
+    candidateChain: {
+      type: "array",
+      minItems: 1,
+      items: {
+        oneOf: [
+          { type: "string", minLength: 1 },
+          { $ref: "#/definitions/candidate" },
+        ],
+      },
+      description:
+        "Ordered fallback chain; each entry is a candidateGroups key or an inline candidate.",
+    },
+    projectRouting: {
+      type: "object",
+      additionalProperties: false,
+      not: { required: ["candidateGroup", "candidates"] },
+      properties: {
+        candidateGroup: { type: "string", minLength: 1 },
+        candidates: { $ref: "#/definitions/candidateChain" },
+        effort: { $ref: "#/definitions/effort" },
+        reservePercent: { type: "integer", minimum: 0, maximum: 99 },
+        preferExpiring: {
+          type: "boolean",
+          description: "Override spendPriority.preferExpiring for this project.",
+        },
+      },
+    },
     difficultyLane: {
       type: "object",
       additionalProperties: false,
       required: ["effort", "candidates"],
       properties: {
         effort: { $ref: "#/definitions/effort" },
-        candidates: {
-          type: "array",
-          minItems: 1,
-          items: {
-            oneOf: [
-              { type: "string", minLength: 1 },
-              { $ref: "#/definitions/candidate" },
-            ],
-          },
-          description:
-            "Ordered fallback chain; each entry is a candidateGroups key or an inline candidate.",
-        },
+        candidates: { $ref: "#/definitions/candidateChain" },
       },
     },
     kindLanes: {

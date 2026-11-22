@@ -73,7 +73,7 @@ examples:
 `;
 
 const VALIDATE_HELP = `usage: llm-router-axi policy validate [--file <path>] [--json]
-description: Validate a policy against policy.schema.json; malformed files are refused (exit 2).
+description: Validate policy fields and candidate group references, including project rules (exit 2 on failure).
 flags[3]:
 ${VALIDATE_FLAGS.map((flag) => `  ${flag.name}${flag.value ? ` <${flag.value}>` : ""}  ${flag.description}`).join("\n")}
   --help

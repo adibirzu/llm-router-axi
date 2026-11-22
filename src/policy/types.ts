@@ -28,6 +28,15 @@ export interface DifficultyLane {
   candidates: Array<string | Candidate>;
 }
 
+export type ProjectRouting = {
+  effort?: Effort;
+  reservePercent?: number;
+  preferExpiring?: boolean;
+} & (
+  | { candidateGroup?: string; candidates?: never }
+  | { candidateGroup?: never; candidates: DifficultyLane["candidates"] }
+);
+
 export interface KindLanes {
   easy: DifficultyLane;
   medium: DifficultyLane;
@@ -118,6 +127,7 @@ export interface SpendPrioritySettings {
   weight: number;
   tieBreaker: "least-recent-use" | "declared-order";
   preferKnown: boolean;
+  preferExpiring?: boolean;
 }
 
 export interface JevShadowSettings {
@@ -144,6 +154,7 @@ export interface Policy {
   pools: PoolSettings;
   spendPriority: SpendPrioritySettings;
   candidateGroups: Record<string, Candidate[]>;
+  projects?: Record<string, ProjectRouting>;
   /**
    * Optional Jev settings (slice 3 shadow hook). Absent means every Jev
    * hook is disabled; older policy files without it keep validating.

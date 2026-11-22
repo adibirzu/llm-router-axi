@@ -271,6 +271,24 @@ function poolFromWindows(windowIds: string[], label: string): PoolDeclaration {
   return { poolWindows: windowIds, poolLabel: label };
 }
 
+/** Next future reset among usable windows in the candidate's quota scope. */
+export function nextQuotaReset(profile: EngineProfile, quota: QuotaRead, now: number): number {
+  const provider = usageProvider(quota, profile.provider);
+  const scope = profile.poolWindows?.length
+    ? profile.poolWindows
+    : profile.quotaWindow ? [profile.quotaWindow] : undefined;
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const window of provider?.windows ?? []) {
+    if (!window || (scope && (!window.id || !scope.includes(window.id)))) continue;
+    const remaining = window.percentRemaining;
+    if (typeof remaining !== "number" || !(remaining >= 0 && remaining <= 100)) continue;
+    if (typeof window.resetsAt !== "string") continue;
+    const reset = Date.parse(window.resetsAt) / 1000;
+    if (reset > now && reset < earliest) earliest = reset;
+  }
+  return earliest;
+}
+
 /** Build the engine profile a policy candidate routes as. */
 export function candidateToProfile(
   policy: Policy,
