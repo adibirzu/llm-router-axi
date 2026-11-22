@@ -14,9 +14,9 @@ Policy-driven LLM router: task descriptor plus live usage in, one harness/model/
 Status: **P2 implementation.** `route`, `select`, `check`, `explain`, `capacity`, and
 `record` are live. Eligibility and diagnostics reproduce the firstmate
 `fm-dispatch-select.mjs` selector on its 14 fixtures. `route` ranks by the
-lane's declared chain order (headroom/spendPriority only break same-rank ties);
-`select` keeps the fork's spendPriority rotation. The doctrine itself stays in
-the policy file, never in code.
+policy chain order. `select` keeps the fork's spendPriority rotation.
+The policy can set `spendPriority.preferExpiring` to rank candidates by their
+next quota reset.
 
 Run it without a global install:
 
@@ -43,6 +43,11 @@ Lanes are keyed by kind (`ship`, `scout`, `review`, `architecture`,
 the doctrine declared once: workers use OpenCode Go first, then free Zen ids,
 then the Grok/Cursor/Gemini subscriptions; architects are Claude/Codex;
 reviewers are Grok/Gemini(agy)/Cursor.
+
+Pass `--project <slug>` to `route` or `explain` to apply the matching
+`projects` policy rule. A rule can override the candidate chain, lane effort,
+reserve, and reset preference. Unlisted projects use the kind and difficulty
+lane.
 
 The same file carries the in-run step-down doctrine under `modelFallback`
 (harness to ordered model ids), `fallbackLanes` (lane order), and

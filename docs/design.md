@@ -10,8 +10,8 @@ state. Eligibility, the frozen rejection strings, and `select`'s spendPriority
 rotation reproduce the firstmate `fm-dispatch-select.mjs` selector on its 14
 fixtures (`test/parity/selector-parity.test.ts` runs the pinned selector side by
 side, `test/select.test.ts` runs it through the `select` CLI). `route` layers the
-P2c rule on top: the lane's declared chain order is the primary rank, and
-headroom/spendPriority only break ties among candidates sharing a chain rank.
+policy chain order on top. A project can override that chain, and reset
+preference can rank candidates by which quota resets first.
 Telemetry comes from
 `usage-axi --json --full` (or `--usage-json`), reusing a fresh cached document so
 a route does not re-pay the slow OpenUsage refresh.
@@ -49,7 +49,7 @@ Doctrine in the default seed (verbatim from `data/captain-shared.md`):
 
 ## 2. Policy schema
 
-Top-level keys (all required; unknown keys are refused):
+Top-level routing keys are listed below. The schema rejects unknown keys.
 
 | Key | Meaning |
 |---|---|
@@ -57,12 +57,34 @@ Top-level keys (all required; unknown keys are refused):
 | `routing` | `reservePercent` (20), `cooldownSeconds` (1800), `telemetryMaxAgeSeconds` (300), `maxFallbacks` (4). |
 | `capacity` | `agentCeiling` (10, 1-256), `oneSuiteAtATime` (true, legacy alias), `maxConcurrentSuites` (1, 1-32), `memoryFreeReservePercent` (**10**), `maxLoadPerCore` (2, 0-128), `llamaParallel` (2, 1-64), `memoryPressureMax` (`warn`), `maxSwapUsedPercent` (`null`). The bounds are the schema ceilings; the shipped default keeps conservative values. |
 | `pools` | Split-pool window ids: cursor `auto_usage`/`api_usage`, agy `gemini_5h`/`gemini_weekly` vs `claude_gpt_5h`/`claude_gpt_weekly`, opencode `opencode-go`/`opencode`. |
-| `spendPriority` | `weight`, `tieBreaker` (`least-recent-use` \| `declared-order`), `preferKnown`. |
+| `spendPriority` | `weight`, `tieBreaker` (`least-recent-use` \| `declared-order`), `preferKnown`, and optional `preferExpiring`. |
 | `candidateGroups` | Named, ordered candidate lists. |
+| `projects` | Optional overrides keyed by project slug. |
 | `kinds` | Lanes keyed by kind, then difficulty. |
 | `modelFallback` / `_model_fallback` | harness to ordered model ids for in-run step-down (below). |
 | `fallbackLanes` | Ordered harness lanes an exhausted chain moves to. |
 | `modelFallbackCycles` | Harnesses whose chain wraps to its head instead of exhausting. |
+
+### Project routing
+
+`route --project <slug>` and `explain --project <slug>` use the same project
+rule. With no matching rule, the kind and difficulty choose the lane. A
+matching rule can set `candidateGroup` to one group or `candidates` to an
+ordered list of group references and inline candidates. A rule with neither
+field inherits the lane's candidates. `effort` overrides the lane default,
+and effort declared by a candidate still takes precedence. `reservePercent`
+overrides the routing reserve for the selected project.
+
+`spendPriority.preferExpiring` enables reset ranking. A project's
+`preferExpiring` overrides that setting. The router uses the earliest future
+`resetsAt` among usable quota windows in each candidate's scope. Candidates
+with a future reset rank first. Tied reset times and candidates with no future
+reset retain their declared order. Reserve, freshness, cooldown, and capacity
+checks still apply. When a policy omits both reset preferences it uses the
+declared order. `select` keeps its Firstmate ranking.
+
+The bundled policy enables reset ranking and configures five projects to use
+the declared Codex, Claude, and agy Gemini chain.
 
 ### 2.4 In-run step-down (`modelFallback`)
 
@@ -192,8 +214,8 @@ decision:
   (an unset axis is omitted; nothing else is printed).
 - `reason` and every fallback reuse the selector's diagnostic vocabulary (§5).
 
-**Chain rank** is the lane's declared candidate order (the expanded
-`candidates` chain, 1-based). The lowest-ranked *eligible* candidate wins, so
+**Chain rank** is the order of the expanded candidate chain after applying
+project rules and any reset preference (1-based). The lowest-ranked *eligible* candidate wins, so
 OpenCode Go's first model beats a subscription with more raw headroom; a
 candidate is skipped only for reserve, cooldown, stale telemetry, or machine
 capacity. Known `spendPriority` (and then least-recent use) breaks a tie only

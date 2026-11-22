@@ -33,6 +33,7 @@ export interface EngineSettings {
 interface QuotaWindow {
   id?: string;
   percentRemaining?: number;
+  resetsAt?: string | null;
 }
 
 interface EffectiveAvailability {

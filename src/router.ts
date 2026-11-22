@@ -12,7 +12,7 @@ import {
   type QuotaRead,
   type SelectionReport,
 } from "./selector.js";
-import { candidatePoolName, candidateToProfile } from "./usage.js";
+import { candidatePoolName, candidateToProfile, nextQuotaReset } from "./usage.js";
 
 interface DecisionCandidate {
   harness: string;
@@ -54,6 +54,7 @@ interface RouteLaneParams {
   policy: Policy;
   kind: Kind;
   difficulty: Difficulty;
+  project?: string;
   quota: QuotaRead;
   state: EngineState;
   now: number;
@@ -63,12 +64,22 @@ interface RouteLaneParams {
 /** Resolve the lane, evaluate every candidate, and assemble the decision. */
 export function routeLane(params: RouteLaneParams): RouterResult {
   const { policy, kind, difficulty, quota, state, now, home } = params;
+  const { project } = params;
+  const projectRule = project && policy.projects && Object.hasOwn(policy.projects, project)
+    ? policy.projects[project]
+    : undefined;
   const lane = policy.kinds[kind][difficulty];
-  const candidates = resolveLaneCandidates(policy, lane);
+  const effort = projectRule?.effort ?? lane.effort;
+  const candidates = resolveLaneCandidates(policy, {
+    effort,
+    candidates: projectRule?.candidateGroup
+      ? [projectRule.candidateGroup]
+      : projectRule?.candidates ?? lane.candidates,
+  });
 
   const routed: RoutedCandidate[] = [];
   for (const candidate of candidates) {
-    const resolved = candidateToProfile(policy, candidate, lane.effort, quota);
+    const resolved = candidateToProfile(policy, candidate, effort, quota);
     if ("error" in resolved) {
       throw new AxiError(resolved.error, "VALIDATION_ERROR", [
         `candidate harness=${candidate.harness} provider=${candidate.provider}`,
@@ -78,13 +89,22 @@ export function routeLane(params: RouteLaneParams): RouterResult {
     routed.push({ candidate, profile: resolved.profile });
   }
 
+  if (projectRule?.preferExpiring ?? policy.spendPriority.preferExpiring) {
+    const resets = new Map(routed.map(({ profile }) => [profile, nextQuotaReset(profile, quota, now)]));
+    routed.sort((a, b) => {
+      const left = resets.get(a.profile) ?? Infinity;
+      const right = resets.get(b.profile) ?? Infinity;
+      return left === right ? 0 : left - right;
+    });
+  }
+
   const profiles = routed.map((item) => item.profile);
   const report = selectProfiles({
     profiles,
     ranks: profiles.map((_, index) => index),
     quota,
     settings: {
-      reservePercent: policy.routing.reservePercent,
+      reservePercent: projectRule?.reservePercent ?? policy.routing.reservePercent,
       telemetryMaxAgeSeconds: policy.routing.telemetryMaxAgeSeconds,
       cooldownSeconds: policy.routing.cooldownSeconds,
     },

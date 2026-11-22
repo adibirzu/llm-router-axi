@@ -161,6 +161,109 @@ afterEach(() => {
 });
 
 describe("route", () => {
+  it.each(["harness-library", "roel-hermes", "rkm-transport-bot", "transport-management", "rkm-trans"])(
+    "routes %s through the bundled priority chain even with an earlier reset",
+    async (project) => {
+      const usageFile = writeJson("project.json", usage({
+        generatedAt: "2026-01-01T00:00:00Z",
+        providers: [
+          { provider: "codex", state: { status: "fresh" }, windows: [
+            { id: "weekly", percentRemaining: 80, resetsAt: "2026-01-04T00:00:00Z" },
+          ] },
+          fresh("claude", 80),
+          { provider: "agy", state: { status: "fresh" }, windows: [
+            { id: "gemini_5h", percentRemaining: 80, resetsAt: "2026-01-01T01:00:00Z" },
+            { id: "gemini_weekly", percentRemaining: 80 },
+          ] },
+        ],
+      }));
+      const args = ["--kind", "ship", "--difficulty", "medium", "--project", project,
+        "--usage-json", usageFile, "--now", "1767225600", "--json"];
+      const result = await run(["route", ...args]);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.output)).toMatchObject({
+        harness: "codex", model: "gpt-6.2-sol",
+        fallbacks: [{ harness: "claude" }, { harness: "agy", pool: "gemini" }],
+      });
+
+      const explained = await run(["explain", ...args]);
+      expect(JSON.parse(explained.output)).toMatchObject({
+        selected: { harness: "codex", model: "gpt-6.2-sol" },
+        candidates: [{ harness: "codex" }, { harness: "claude" }, { harness: "agy" }],
+      });
+    },
+  );
+
+  it.each([
+    ["unlisted", true, "2026-01-01T03:00:00Z", 65, "opencode"],
+    ["bulk-work", false, "2026-01-01T03:00:00Z", 65, "opencode"],
+    ["unlisted", true, undefined, 65, "codex"],
+    ["unlisted", true, "2025-12-31T23:00:00Z", 65, "codex"],
+    ["unlisted", true, "invalid", 65, "codex"],
+    ["unlisted", true, "2026-01-01T03:00:00Z", 20, "claude"],
+    ["unlisted", false, "2026-01-01T03:00:00Z", 65, "codex"],
+  ])("routes %s with preferExpiring=%s, reset=%s, and headroom=%s to %s",
+    async (project, preferExpiring, resetsAt, percentRemaining, harness) => {
+      const policy = cloneDefault();
+      policy.kinds.ship.medium.candidates = [
+        { harness: "codex", provider: "codex" },
+        { harness: "opencode", provider: "opencode", model: "opencode-go/deepseek-v4.1-flash" },
+        { harness: "claude", provider: "claude" },
+      ];
+      policy.spendPriority.preferExpiring = preferExpiring;
+      policy.projects = { "bulk-work": { preferExpiring: true } };
+      writePolicy(policy);
+      const usageFile = writeJson("bulk.json", usage({
+        generatedAt: "2026-01-01T00:00:00Z",
+        providers: [
+          { provider: "codex", state: { status: "fresh" }, windows: [
+            { id: "weekly", percentRemaining: 90, resetsAt: "2026-01-04T00:00:00Z" },
+          ] },
+          { provider: "opencode-go", state: { status: "fresh" }, windows: [
+            { id: "rolling", percentRemaining, resetsAt },
+            { id: "weekly", percentRemaining: 85 },
+            { id: "unrelated", percentRemaining: 100, resetsAt: "2026-01-01T00:01:00Z" },
+          ] },
+          { provider: "claude", state: { status: "fresh" }, windows: [
+            { id: "weekly", percentRemaining: 90, resetsAt: "2026-01-03T00:00:00Z" },
+          ] },
+        ].filter(({ provider }) => provider !== "claude" || resetsAt === "2026-01-01T03:00:00Z"),
+      }));
+      const result = await run(["route", "--kind", "ship", "--difficulty", "medium", "--project", project,
+        "--usage-json", usageFile, "--now", "1767225600", "--json"]);
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.output)).toMatchObject({
+        harness,
+        ...(harness === "opencode" ? { fallbacks: [{ harness: "claude" }, { harness: "codex" }] } : {}),
+      });
+    },
+  );
+
+  it("applies inline project candidates, effort and a zero reserve", async () => {
+    const policy = cloneDefault();
+    policy.projects = {
+      custom: {
+        candidates: [
+          { harness: "claude", provider: "claude", effort: "low" },
+          { harness: "codex", provider: "codex" },
+        ],
+        effort: "high",
+        reservePercent: 0,
+      },
+    };
+    writePolicy(policy);
+    const usageFile = writeJson("custom.json", usage({
+      generatedAt: "2026-01-01T00:00:00Z",
+      providers: [fresh("claude", 1), fresh("codex", 80)],
+    }));
+    const result = await run(["route", "--kind", "ship", "--difficulty", "medium", "--project", "custom",
+      "--usage-json", usageFile, "--now", "1767225600", "--json"]);
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.output)).toMatchObject({
+      harness: "claude", effort: "low", fallbacks: [{ harness: "codex", effort: "high" }],
+    });
+  });
+
   it("prints exactly the fm-spawn flags and nothing else", async () => {
     const policy = cloneDefault();
     policy.kinds.ship.medium.candidates = [
