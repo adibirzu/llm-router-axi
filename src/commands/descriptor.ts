@@ -45,7 +45,7 @@ export const DESCRIPTOR_FLAGS: FlagSpec[] = [
     value: "vision,long-context,tools",
     description: "Comma-separated capability needs",
   },
-  { name: "--project", value: "name", description: "Project name" },
+  { name: "--project", value: "name", description: "Project policy slug" },
   {
     name: "--usage-json",
     value: "path",

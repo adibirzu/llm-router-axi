@@ -9,6 +9,7 @@ import { loadUsage } from "../usage.js";
 export interface DescriptorRequest {
   kind: Kind;
   difficulty: Difficulty;
+  project?: string;
   usageJson?: string;
   now?: number;
 }
@@ -46,6 +47,7 @@ export function evaluateDescriptor(request: DescriptorRequest): DescriptorEvalua
       policy: read.policy,
       kind: request.kind,
       difficulty: request.difficulty,
+      ...(request.project !== undefined ? { project: request.project } : {}),
       quota,
       state,
       now,

@@ -109,6 +109,37 @@ describe("default policy", () => {
   });
 });
 
+describe("project routing policy", () => {
+  it("accepts optional project rules and a global reset preference", () => {
+    const policy = cloneDefault();
+    policy.projects = {
+      "harness-library": { candidateGroup: "architects", effort: "high", reservePercent: 0 },
+      "bulk-work": { candidates: ["workers", { harness: "codex", provider: "codex" }], preferExpiring: true },
+      "enforce-reserve": { reservePercent: 45 },
+    };
+    policy.spendPriority = { ...readDefaultPolicy().spendPriority, preferExpiring: true };
+    expect(validatePolicy(policy)).toMatchObject({ ok: true });
+
+    delete policy.projects;
+    expect(validatePolicy(policy)).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    [{ typo: true }, "/projects/harness-library", "unexpected property"],
+    [{ candidateGroup: "absent" }, "/projects/harness-library/candidateGroup", "unknown candidate group"],
+    [{ candidates: ["absent"] }, "/projects/harness-library/candidates/0", "unknown candidate group"],
+    [{ candidateGroup: "workers", candidates: ["workers"] }, "/projects/harness-library", "must NOT be valid"],
+    [{ reservePercent: 100 }, "/projects/harness-library/reservePercent", "must be <="],
+  ])("rejects invalid project rule %j", (rule, path, message) => {
+    const policy = cloneDefault();
+    policy.projects = { "harness-library": rule };
+    expect(validatePolicy(policy)).toMatchObject({
+      ok: false,
+      issues: expect.arrayContaining([{ path, message: expect.stringContaining(message) }]),
+    });
+  });
+});
+
 describe("live policy fixture", () => {
   it("validates the Mac mini's effective policy.json (capacity.llamaParallel included)", () => {
     const live = JSON.parse(readFileSync(livePolicyPath, "utf8")) as Record<string, unknown>;
